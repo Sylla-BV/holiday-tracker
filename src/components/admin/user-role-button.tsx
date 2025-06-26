@@ -2,7 +2,7 @@
 
 import { useTransition } from 'react';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { updateUserRole } from '@/app/actions';
 
 interface UserRoleButtonProps {
@@ -12,7 +12,6 @@ interface UserRoleButtonProps {
 
 export function UserRoleButton({ userId, currentRole }: UserRoleButtonProps) {
   const [isPending, startTransition] = useTransition();
-  const { toast } = useToast();
 
   const handleUpdateRole = () => {
     const newRole = currentRole === 'admin' ? 'member' : 'admin';
@@ -21,16 +20,9 @@ export function UserRoleButton({ userId, currentRole }: UserRoleButtonProps) {
       const result = await updateUserRole(userId, newRole);
       
       if (result.success) {
-        toast({
-          title: 'Success',
-          description: `User role updated to ${newRole}`,
-        });
+        toast.success(`User role updated to ${newRole}`);
       } else {
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: result.error || 'Failed to update user role',
-        });
+        toast.error(result.error || 'Failed to update user role');
       }
     });
   };

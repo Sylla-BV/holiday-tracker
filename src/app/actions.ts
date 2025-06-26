@@ -19,7 +19,7 @@ const requestSchema = z.object({
     required_error: 'End date is required',
     invalid_type_error: 'End date must be a valid date',
   }),
-  leaveType: z.enum(['annual', 'sick', 'personal', 'maternity', 'paternity', 'other']),
+  leaveType: z.enum(['annual', 'sick', 'personal', 'maternity', 'paternity', 'other', 'public']),
   notes: z.string().optional(),
 }).refine((data) => data.endDate >= data.startDate, {
   message: 'End date must be after or equal to start date',
@@ -74,7 +74,42 @@ export async function getUsers() {
 }
 
 /**
- * Get all holiday requests with user relations
+ * Map database leave types to display strings
+ */
+function mapLeaveTypeToDisplay(dbType: string): string {
+  switch (dbType) {
+    case 'annual':
+      return 'Vacation';
+    case 'sick':
+      return 'Sick Leave';
+    case 'personal':
+      return 'Personal';
+    case 'maternity':
+      return 'Maternity Leave';
+    case 'paternity':
+      return 'Paternity Leave';
+    default:
+      return 'Other';
+  }
+}
+
+/**
+ * Map database status to display strings
+ */
+function mapStatusToDisplay(dbStatus: string): string {
+  switch (dbStatus) {
+    case 'approved':
+      return 'Approved';
+    case 'rejected':
+      return 'Rejected';
+    case 'pending':
+    default:
+      return 'Pending';
+  }
+}
+
+/**
+ * Get all holiday requests with user relations and formatted data
  */
 export async function getHolidayRequests() {
   try {
@@ -87,7 +122,22 @@ export async function getHolidayRequests() {
       where: (table, { ne }) => ne(table.status, 'rejected'),
     });
 
-    return { success: true, data: requests };
+    // Transform data on server-side to avoid client-side processing
+    const transformedRequests = requests
+      .filter(request => request.user) // Only include requests with valid users
+      .map(request => ({
+        id: request.id,
+        startDate: new Date(request.startDate),
+        endDate: new Date(request.endDate),
+        type: mapLeaveTypeToDisplay(request.leaveType),
+        status: mapStatusToDisplay(request.status),
+        user: request.user!,
+        // Keep original fields for backward compatibility
+        leaveType: request.leaveType,
+        dbStatus: request.status,
+      }));
+
+    return { success: true, data: transformedRequests };
   } catch (error) {
     console.error('Error fetching holiday requests:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch holiday requests';
@@ -285,7 +335,7 @@ export async function handleRequestTimeOff(input: { startDate: Date; endDate: Da
 /**
  * Map frontend leave types to database enum values
  */
-function mapLeaveType(frontendType: string): 'annual' | 'sick' | 'personal' | 'maternity' | 'paternity' | 'other' {
+function mapLeaveType(frontendType: string): 'annual' | 'sick' | 'personal' | 'maternity' | 'paternity' | 'other' | 'public' {
   switch (frontendType.toLowerCase()) {
     case 'vacation':
       return 'annual';
@@ -300,6 +350,8 @@ function mapLeaveType(frontendType: string): 'annual' | 'sick' | 'personal' | 'm
     case 'paternity':
     case 'paternity leave':
       return 'paternity';
+    case 'public holiday':
+      return 'public';
     default:
       return 'other';
   }

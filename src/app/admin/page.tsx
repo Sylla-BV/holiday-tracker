@@ -10,6 +10,7 @@ import { Shield, User, Crown, Users, CalendarCheck } from 'lucide-react';
 import { UserRoleButton } from '@/components/admin/user-role-button';
 import { ApprovalButton } from '@/components/admin/approval-button';
 import Header from '@/components/layout/header';
+import { getUsers } from '../actions';
 
 interface User {
   id: string;
@@ -17,21 +18,6 @@ interface User {
   email: string;
   role: 'admin' | 'member';
   createdAt: Date;
-}
-
-async function getUsers(): Promise<User[]> {
-  const allUsers = await db
-    .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      role: users.role,
-      createdAt: users.createdAt,
-    })
-    .from(users)
-    .orderBy(users.createdAt);
-
-  return allUsers;
 }
 
 async function getPendingRequests() {
@@ -182,7 +168,7 @@ export default async function AdminPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {allUsers.map((user) => (
+                  {allUsers.data?.map((user) => (
                     <div
                       key={user.id}
                       className="flex items-center justify-between p-4 border rounded-lg"
@@ -198,7 +184,7 @@ export default async function AdminPage() {
                       </div>
                       
                       <div className="flex items-center gap-3">
-                        <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
+                        <Badge className={user.role === 'admin' ? 'bg-primary' : 'bg-accent'}>
                           {user.role === 'admin' ? (
                             <>
                               <Crown className="h-3 w-3 mr-1" />

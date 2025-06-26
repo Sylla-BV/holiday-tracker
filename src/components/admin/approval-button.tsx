@@ -2,7 +2,7 @@
 
 import { useTransition } from 'react';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { updateRequestStatus } from '@/app/actions';
 import { Check, X } from 'lucide-react';
 
@@ -14,23 +14,15 @@ interface ApprovalButtonProps {
 
 export function ApprovalButton({ requestId, action, variant = 'default' }: ApprovalButtonProps) {
   const [isPending, startTransition] = useTransition();
-  const { toast } = useToast();
 
   const handleApproval = () => {
     startTransition(async () => {
       const result = await updateRequestStatus(requestId, action);
       
       if (result.success) {
-        toast({
-          title: 'Success',
-          description: `Request ${action} successfully`,
-        });
+        toast.success(`Request ${action} successfully`);
       } else {
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: result.error || `Failed to ${action} request`,
-        });
+        toast.error(result.error || `Failed to ${action} request`);
       }
     });
   };
@@ -38,6 +30,7 @@ export function ApprovalButton({ requestId, action, variant = 'default' }: Appro
   return (
     <Button
       size="sm"
+      className={action === 'approved' ? "bg-green-500 text-white hover:bg-green-600" : ""}
       variant={variant}
       disabled={isPending}
       onClick={handleApproval}

@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import type { User, HolidayRequest } from '@/lib/schema';
+import React, { useState, use } from 'react';
+import type { User, TransformedHolidayRequest } from '@/lib/schema';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { isSameDay, isWithinInterval, format } from 'date-fns';
@@ -10,24 +10,42 @@ import { Badge } from '../ui/badge';
 import { CalendarDays } from 'lucide-react';
 
 type TeamCalendarProps = {
-  users: User[];
-  holidayRequests: Array<HolidayRequest & { user: User | null }>;
+  usersPromise: Promise<{ success: boolean; data?: User[]; error?: string }>;
+  holidayRequestsPromise: Promise<{ success: boolean; data?: TransformedHolidayRequest[]; error?: string }>;
   className?: string;
 };
 
-export default function TeamCalendar({ users, holidayRequests, className }: TeamCalendarProps) {
+export default function TeamCalendar({ usersPromise, holidayRequestsPromise, className }: TeamCalendarProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
-  const allAbsences = holidayRequests
-    .filter(request => request.user) // Only include requests with valid users
-    .map(request => ({
-      id: request.id,
-      startDate: new Date(request.startDate),
-      endDate: new Date(request.endDate),
-      type: mapLeaveTypeToDisplay(request.leaveType),
-      status: mapStatusToDisplay(request.status),
-      user: request.user!,
-    }));
+  const usersResult = use(usersPromise);
+  const holidayRequestsResult = use(holidayRequestsPromise);
+
+  if (!usersResult.success || !holidayRequestsResult.success) {
+    return (
+      <Card className={className}>
+        <CardHeader>
+          <CardTitle>Team Absence Calendar</CardTitle>
+          <CardDescription>Click on a date to see who is away.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center text-red-500 p-8">
+            <h3 className="text-lg font-semibold mb-2">Error Loading Calendar</h3>
+            <p className="text-sm">
+              {!usersResult.success && usersResult.error}
+              {!holidayRequestsResult.success && holidayRequestsResult.error}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const users = usersResult.data || [];
+  const holidayRequests = holidayRequestsResult.data || [];
+
+  // Data is already transformed on the server-side
+  const allAbsences = holidayRequests;
 
   const modifiers = {
     vacation: allAbsences
@@ -45,9 +63,9 @@ export default function TeamCalendar({ users, holidayRequests, className }: Team
   };
 
   const modifierStyles = {
-    vacation: { backgroundColor: 'hsl(var(--primary) / 0.2)', color: 'hsl(var(--primary))' },
-    sick: { backgroundColor: 'hsl(var(--accent) / 0.2)', color: 'hsl(var(--accent))' },
-    personal: { backgroundColor: 'hsl(var(--secondary))', color: 'hsl(var(--secondary-foreground))' },
+    vacation: { backgroundColor: 'hsl(var(--accent) / 0.4)', color: 'hsl(var(--accent-foreground))' },
+    sick: { backgroundColor: 'hsl(var(--accent) / 0.4)', color: 'hsl(var(--accent-foreground))' },
+    personal: { backgroundColor: 'hsl(var(--accent) / 0.4)', color: 'hsl(var(--accent-foreground))' },
     pending: { border: '2px dashed hsl(var(--muted-foreground))' },
   };
 
@@ -104,31 +122,3 @@ export default function TeamCalendar({ users, holidayRequests, className }: Team
   );
 }
 
-function mapLeaveTypeToDisplay(dbType: string): string {
-  switch (dbType) {
-    case 'annual':
-      return 'Vacation';
-    case 'sick':
-      return 'Sick Leave';
-    case 'personal':
-      return 'Personal';
-    case 'maternity':
-      return 'Maternity Leave';
-    case 'paternity':
-      return 'Paternity Leave';
-    default:
-      return 'Other';
-  }
-}
-
-function mapStatusToDisplay(dbStatus: string): string {
-  switch (dbStatus) {
-    case 'approved':
-      return 'Approved';
-    case 'rejected':
-      return 'Rejected';
-    case 'pending':
-    default:
-      return 'Pending';
-  }
-}

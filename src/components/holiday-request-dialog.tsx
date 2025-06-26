@@ -37,7 +37,7 @@ import { z } from 'zod';
 import { CalendarIcon, Loader2, Wand2, Forward, CheckCircle, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { addDays, format } from 'date-fns';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { handleRequestTimeOff } from '@/app/actions';
 import type { SuggestAlternativeDatesOutput } from '@/ai/flows/suggest-alternative-dates';
 
@@ -58,7 +58,6 @@ export function HolidayRequestDialog() {
   const [startDateOpen, setStartDateOpen] = useState(false);
   const [endDateOpen, setEndDateOpen] = useState(false);
 
-  const { toast } = useToast();
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -78,21 +77,17 @@ export function HolidayRequestDialog() {
     setIsLoading(false);
     
     if (result.success) {
-      toast({
-        title: 'Request Submitted!',
+      toast.success('Request Submitted!', {
         description: 'Your time off request has been successfully submitted.',
-        action: <CheckCircle className="text-green-500" />,
       });
       setOpen(false);
       form.reset();
     } else if (result.suggestions) {
       setAiSuggestions(result.suggestions);
     } else {
-        toast({
-            variant: "destructive",
-            title: 'An error occurred',
-            description: result.error || 'Failed to process your request.'
-        });
+      toast.error('An error occurred', {
+        description: result.error || 'Failed to process your request.'
+      });
     }
   }
   

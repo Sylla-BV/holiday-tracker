@@ -4,7 +4,7 @@ import type { AdapterAccount } from 'next-auth/adapters';
 
 // Enums
 export const roleEnum = pgEnum('role', ['admin', 'member']);
-export const leaveTypeEnum = pgEnum('leave_type', ['annual', 'sick', 'personal', 'maternity', 'paternity', 'other']);
+export const leaveTypeEnum = pgEnum('leave_type', ['annual', 'sick', 'personal', 'maternity', 'paternity', 'public', 'other']);
 export const statusEnum = pgEnum('status', ['pending', 'approved', 'rejected']);
 
 // Users table (NextAuth.js compatible)
@@ -89,3 +89,16 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type HolidayRequest = typeof holidayRequests.$inferSelect;
 export type NewHolidayRequest = typeof holidayRequests.$inferInsert;
+
+// Transformed holiday request type for client components
+export type TransformedHolidayRequest = {
+  id: string;
+  startDate: Date;
+  endDate: Date;
+  type: string; // Display-friendly type (e.g., "Vacation", "Sick Leave")
+  status: string; // Display-friendly status (e.g., "Approved", "Pending")
+  user: User;
+  // Keep original fields for backward compatibility
+  leaveType: 'annual' | 'sick' | 'personal' | 'maternity' | 'paternity' | 'other';
+  dbStatus: 'pending' | 'approved' | 'rejected';
+};

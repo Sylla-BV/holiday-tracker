@@ -1,5 +1,5 @@
 import type {Metadata} from 'next';
-import {Toaster} from '@/components/ui/toaster';
+import { Toaster } from 'sonner';
 import AuthSessionProvider from '@/components/auth/session-provider';
 import './globals.css';
 
@@ -30,7 +30,7 @@ export default function RootLayout({
       <body className="font-body antialiased bg-background">
         <AuthSessionProvider>
           {children}
-          <Toaster />
+          <Toaster position="top-center" />
         </AuthSessionProvider>
       </body>
     </html>

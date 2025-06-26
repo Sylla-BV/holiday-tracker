@@ -1,4 +1,7 @@
-import type { User, HolidayRequest } from '@/lib/schema';
+'use client';
+
+import { use } from 'react';
+import type { User, TransformedHolidayRequest } from '@/lib/schema';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,21 +9,39 @@ import { format, isFuture } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 
 type AbsencesTableProps = {
-  users: User[];
-  holidayRequests: Array<HolidayRequest & { user: User | null }>;
+  usersPromise: Promise<{ success: boolean; data?: User[]; error?: string }>;
+  holidayRequestsPromise: Promise<{ success: boolean; data?: TransformedHolidayRequest[]; error?: string }>;
 };
 
-export default function AbsencesTable({ users, holidayRequests }: AbsencesTableProps) {
+export default function AbsencesTable({ usersPromise, holidayRequestsPromise }: AbsencesTableProps) {
+  const usersResult = use(usersPromise);
+  const holidayRequestsResult = use(holidayRequestsPromise);
+
+  if (!usersResult.success || !holidayRequestsResult.success) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Upcoming Absences</CardTitle>
+          <CardDescription>A list of scheduled time off for the team.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center text-red-500 p-8">
+            <h3 className="text-lg font-semibold mb-2">Error Loading Absences</h3>
+            <p className="text-sm">
+              {!usersResult.success && usersResult.error}
+              {!holidayRequestsResult.success && holidayRequestsResult.error}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const users = usersResult.data || [];
+  const holidayRequests = holidayRequestsResult.data || [];
+
+  // Data is already transformed on the server-side, just need filtering and sorting
   const allAbsences = holidayRequests
-    .filter(request => request.user) // Only include requests with valid users
-    .map(request => ({
-      id: request.id,
-      startDate: new Date(request.startDate),
-      endDate: new Date(request.endDate),
-      type: mapLeaveTypeToDisplay(request.leaveType),
-      status: mapStatusToDisplay(request.status),
-      user: request.user!,
-    }))
     .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
     .filter(absence => isFuture(absence.endDate) || absence.status === 'Pending');
 
@@ -78,31 +99,3 @@ export default function AbsencesTable({ users, holidayRequests }: AbsencesTableP
   );
 }
 
-function mapLeaveTypeToDisplay(dbType: string): string {
-  switch (dbType) {
-    case 'annual':
-      return 'Vacation';
-    case 'sick':
-      return 'Sick Leave';
-    case 'personal':
-      return 'Personal';
-    case 'maternity':
-      return 'Maternity Leave';
-    case 'paternity':
-      return 'Paternity Leave';
-    default:
-      return 'Other';
-  }
-}
-
-function mapStatusToDisplay(dbStatus: string): string {
-  switch (dbStatus) {
-    case 'approved':
-      return 'Approved';
-    case 'rejected':
-      return 'Rejected';
-    case 'pending':
-    default:
-      return 'Pending';
-  }
-}

@@ -1,26 +1,53 @@
 'use client';
 
-import type { User, HolidayRequest } from '@/lib/schema';
+import { use } from 'react';
+import type { User, TransformedHolidayRequest } from '@/lib/schema';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { isWithinInterval, format } from 'date-fns';
 import { CalendarX } from 'lucide-react';
 
 type CurrentStatusProps = {
-  users: User[];
-  holidayRequests: Array<HolidayRequest & { user: User | null }>;
+  usersPromise: Promise<{ success: boolean; data?: User[]; error?: string }>;
+  holidayRequestsPromise: Promise<{ success: boolean; data?: TransformedHolidayRequest[]; error?: string }>;
 };
 
-export default function CurrentStatus({ users, holidayRequests }: CurrentStatusProps) {
+export default function CurrentStatus({ usersPromise, holidayRequestsPromise }: CurrentStatusProps) {
   const today = new Date();
+  
+  const usersResult = use(usersPromise);
+  const holidayRequestsResult = use(holidayRequestsPromise);
+
+  if (!usersResult.success || !holidayRequestsResult.success) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Who's Away Today?</CardTitle>
+          <CardDescription>{format(today, 'MMMM d, yyyy')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center text-red-500 p-8">
+            <h3 className="text-lg font-semibold mb-2">Error Loading Status</h3>
+            <p className="text-sm">
+              {!usersResult.success && usersResult.error}
+              {!holidayRequestsResult.success && holidayRequestsResult.error}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const users = usersResult.data || [];
+  const holidayRequests = holidayRequestsResult.data || [];
   
   // Get approved requests that are active today
   const activeRequests = holidayRequests.filter(request => 
-    request.status === 'approved' && 
+    request.status === 'Approved' && 
     request.user &&
     isWithinInterval(today, { 
-      start: new Date(request.startDate), 
-      end: new Date(request.endDate) 
+      start: request.startDate, 
+      end: request.endDate 
     })
   );
 
@@ -48,7 +75,7 @@ export default function CurrentStatus({ users, holidayRequests }: CurrentStatusP
                 <div className="flex-1">
                   <p className="font-semibold">{user.name || 'Unknown User'}</p>
                   <p className="text-sm text-muted-foreground">
-                    Back on {format(new Date(request.endDate), 'MMM d')}
+                    Back on {format(request.endDate, 'MMM d')}
                   </p>
                 </div>
               </li>
