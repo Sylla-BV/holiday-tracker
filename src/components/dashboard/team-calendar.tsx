@@ -41,21 +41,14 @@ export default function TeamCalendar({ usersPromise, holidayRequestsPromise, cla
     );
   }
 
-  const users = usersResult.data || [];
   const holidayRequests = holidayRequestsResult.data || [];
 
   // Data is already transformed on the server-side
   const allAbsences = holidayRequests;
 
   const modifiers = {
-    vacation: allAbsences
-      .filter(a => a.type === 'Vacation' && a.status === 'Approved')
-      .map(a => ({ from: a.startDate, to: a.endDate })),
-    sick: allAbsences
-      .filter(a => a.type === 'Sick Leave' && a.status === 'Approved')
-      .map(a => ({ from: a.startDate, to: a.endDate })),
-    personal: allAbsences
-      .filter(a => a.type === 'Personal' && a.status === 'Approved')
+    approved: allAbsences
+      .filter(a => a.status === 'Approved')
       .map(a => ({ from: a.startDate, to: a.endDate })),
     pending: allAbsences
       .filter(a => a.status === 'Pending')
@@ -63,10 +56,8 @@ export default function TeamCalendar({ usersPromise, holidayRequestsPromise, cla
   };
 
   const modifierStyles = {
-    vacation: { backgroundColor: 'hsl(var(--accent) / 0.4)', color: 'hsl(var(--accent-foreground))' },
-    sick: { backgroundColor: 'hsl(var(--accent) / 0.4)', color: 'hsl(var(--accent-foreground))' },
-    personal: { backgroundColor: 'hsl(var(--accent) / 0.4)', color: 'hsl(var(--accent-foreground))' },
-    pending: { border: '2px dashed hsl(var(--muted-foreground))' },
+    approved: { backgroundColor: 'hsl(var(--accent) / 0.5)', color: 'hsl(var(--accent-foreground))' },
+    pending: { border: '2px dashed hsl(var(--muted-foreground))', backgroundColor: 'hsl(var(--muted) / 0.2)' },
   };
 
   const absencesOnSelectedDay = allAbsences.filter(absence => 

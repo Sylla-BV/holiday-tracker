@@ -34,7 +34,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { CalendarIcon, Loader2, Wand2, Forward, CheckCircle, AlertTriangle } from 'lucide-react';
+import { CalendarIcon, Loader2, Wand2, Forward, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { addDays, format } from 'date-fns';
 import { toast } from 'sonner';
@@ -256,6 +256,7 @@ export function HolidayRequestDialog() {
                         <SelectItem value="Vacation">Vacation</SelectItem>
                         <SelectItem value="Sick Leave">Sick Leave</SelectItem>
                         <SelectItem value="Personal">Personal Day</SelectItem>
+                        <SelectItem value="Public Holiday">Public Holiday</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

@@ -99,6 +99,6 @@ export type TransformedHolidayRequest = {
   status: string; // Display-friendly status (e.g., "Approved", "Pending")
   user: User;
   // Keep original fields for backward compatibility
-  leaveType: 'annual' | 'sick' | 'personal' | 'maternity' | 'paternity' | 'other';
+  leaveType: 'annual' | 'sick' | 'personal' | 'maternity' | 'paternity' | 'public' | 'other';
   dbStatus: 'pending' | 'approved' | 'rejected';
 };

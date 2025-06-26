@@ -88,6 +88,8 @@ function mapLeaveTypeToDisplay(dbType: string): string {
       return 'Maternity Leave';
     case 'paternity':
       return 'Paternity Leave';
+    case 'public':
+      return 'Public Holiday';
     default:
       return 'Other';
   }
