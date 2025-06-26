@@ -55,6 +55,8 @@ export function HolidayRequestDialog() {
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<SuggestAlternativeDatesOutput | null>(null);
+  const [startDateOpen, setStartDateOpen] = useState(false);
+  const [endDateOpen, setEndDateOpen] = useState(false);
 
   const { toast } = useToast();
   const form = useForm<z.infer<typeof formSchema>>({
@@ -153,7 +155,7 @@ export function HolidayRequestDialog() {
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Start Date</FormLabel>
-                      <Popover>
+                      <Popover open={startDateOpen} onOpenChange={setStartDateOpen}>
                         <PopoverTrigger asChild>
                           <Button
                             variant={'outline'}
@@ -177,6 +179,8 @@ export function HolidayRequestDialog() {
                             onSelect={(date) => {
                               if (date) {
                                 field.onChange(date);
+                                form.setValue('endDate', date);
+                                setStartDateOpen(false);
                               }
                             }}
                             disabled={(date) =>
@@ -199,7 +203,7 @@ export function HolidayRequestDialog() {
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>End Date</FormLabel>
-                      <Popover>
+                      <Popover open={endDateOpen} onOpenChange={setEndDateOpen}>
                         <PopoverTrigger asChild>
                           <Button
                             variant={'outline'}
@@ -223,6 +227,7 @@ export function HolidayRequestDialog() {
                             onSelect={(date) => {
                               if (date) {
                                 field.onChange(date);
+                                setEndDateOpen(false);
                               }
                             }}
                             disabled={(date) =>

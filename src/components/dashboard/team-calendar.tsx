@@ -50,7 +50,7 @@ export default function TeamCalendar({ users, holidayRequests, className }: Team
     personal: { backgroundColor: 'hsl(var(--secondary))', color: 'hsl(var(--secondary-foreground))' },
     pending: { border: '2px dashed hsl(var(--muted-foreground))' },
   };
-  
+
   const absencesOnSelectedDay = allAbsences.filter(absence => 
     isWithinInterval(selectedDate, { start: absence.startDate, end: absence.endDate })
   );
@@ -77,7 +77,7 @@ export default function TeamCalendar({ users, holidayRequests, className }: Team
           {absencesOnSelectedDay.length > 0 ? (
             <ul className="space-y-4">
               {absencesOnSelectedDay.map(absence => (
-                <li key={absence.id} className="flex items-start gap-4 p-3 rounded-lg bg-secondary/50">
+                <li key={absence.id} className="flex items-start gap-4 p-3 rounded-lg bg-secondary/10">
                    <Avatar>
                     <AvatarImage src={absence.user.image || ''} alt={absence.user.name || ''} data-ai-hint="person portrait" />
                     <AvatarFallback>{(absence.user.name || 'U').charAt(0)}</AvatarFallback>

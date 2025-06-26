@@ -62,12 +62,11 @@ export default async function AdminPage() {
     redirect('/auth/signin?callbackUrl=/admin');
   }
 
-  // Check if current user is admin
   const currentUser = await db.query.users.findFirst({
-    where: eq(users.id, session.user.id),
+    where: (table, { and, eq }) => and(eq(table.id, session.user.id), eq(table.role, 'admin')),
   });
 
-  if (!currentUser || currentUser.role !== 'admin') {
+  if (!currentUser) {
     return (
       <div className="flex min-h-screen w-full flex-col">
         <Header />
