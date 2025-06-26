@@ -4,7 +4,7 @@ import React, { useState, use } from 'react';
 import type { User, TransformedHolidayRequest } from '@/lib/schema';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import { isSameDay, isWithinInterval, format } from 'date-fns';
+import { isSameDay, isWithinInterval, format, startOfDay } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Badge } from '../ui/badge';
 import { CalendarDays } from 'lucide-react';
@@ -61,7 +61,10 @@ export default function TeamCalendar({ usersPromise, holidayRequestsPromise, cla
   };
 
   const absencesOnSelectedDay = allAbsences.filter(absence => 
-    isWithinInterval(selectedDate, { start: absence.startDate, end: absence.endDate })
+    isWithinInterval(startOfDay(selectedDate), { 
+      start: startOfDay(absence.startDate), 
+      end: startOfDay(absence.endDate) 
+    })
   );
 
   return (
