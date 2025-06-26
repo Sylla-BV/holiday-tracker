@@ -53,8 +53,15 @@ Here is a list of team members and their existing absences:
 
 Suggest at least three alternative date ranges that minimize conflicts with existing absences. Explain your reasoning for suggesting these dates.
 
-Output in JSON format:
-{{outputFormat schema="SuggestAlternativeDatesOutputSchema"}}
+Please respond with a JSON object in this exact format:
+{
+  "alternativeDates": [
+    {"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"},
+    {"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"},
+    {"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}
+  ],
+  "reasoning": "Explanation of why these dates were suggested to minimize conflicts"
+}
 `,
 });
 

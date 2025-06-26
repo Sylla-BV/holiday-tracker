@@ -4,8 +4,8 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { users, holidayRequests } from '@/lib/schema';
 import { eq, and, gte, lte, or } from 'drizzle-orm';
-import { suggestAlternativeDates } from '@/ai/flows/suggest-alternative-dates';
-import { isWithinInterval, parseISO } from 'date-fns';
+// Temporarily disabled AI suggestions
+// import { suggestAlternativeDates } from '@/ai/flows/suggest-alternative-dates';
 import { revalidatePath } from 'next/cache';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
@@ -165,6 +165,10 @@ export async function createHolidayRequest(input: RequestTimeOffInput) {
     const conflicts = await checkForConflicts(startDate, endDate);
     
     if (conflicts.hasConflict) {
+      // AI suggestions temporarily disabled - just return conflict error
+      return { success: false, error: 'Scheduling conflict detected. Please choose different dates.' };
+      
+      /* Temporarily disabled AI suggestions
       // Generate AI suggestions for alternative dates
       try {
         const allUsers = await db.query.users.findMany();
@@ -195,6 +199,7 @@ export async function createHolidayRequest(input: RequestTimeOffInput) {
         console.error('AI suggestion error:', aiError);
         return { success: false, error: 'Scheduling conflict detected, but could not generate suggestions.' };
       }
+      */
     }
 
     // Create the holiday request
@@ -275,29 +280,25 @@ async function checkForConflicts(startDate: Date, endDate: Date): Promise<{ hasC
     const startDateStr = startDate.toISOString().split('T')[0];
     const endDateStr = endDate.toISOString().split('T')[0];
     
-    const conflicts = await db
-      .select({
-        id: holidayRequests.id,
-        startDate: holidayRequests.startDate,
-        endDate: holidayRequests.endDate,
+    const conflicts = await db.query.holidayRequests.findMany({
+      columns: {
+        id: true,
+        startDate: true,
+        endDate: true,
+      },
+      with: {
         user: {
-          name: users.name,
-        },
-      })
-      .from(holidayRequests)
-      .leftJoin(users, eq(holidayRequests.userId, users.id))
-      .where(
-        and(
-          eq(holidayRequests.status, 'approved'),
-          // Check for date overlap: (start1 <= end2) AND (start2 <= end1)
-          or(
-            and(
-              lte(holidayRequests.startDate, endDateStr),
-              gte(holidayRequests.endDate, startDateStr)
-            )
-          )
-        )
-      );
+          columns: {
+            name: true
+          }
+        }
+      },
+      where: (table, { and, eq, lte, gte }) => and(
+        eq(table.status, 'approved'),
+        lte(table.startDate, endDateStr),
+        gte(table.endDate, startDateStr)
+      )
+    });
 
     return {
       hasConflict: conflicts.length > 0,
@@ -542,6 +543,42 @@ export async function updateUserRole(userId: string, role: 'admin' | 'member'): 
     console.error('Error updating user role:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to update user role';
     return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Check for conflicts with existing approved holiday requests (public function)
+ */
+export async function checkHolidayConflicts(input: { startDate: Date; endDate: Date }): Promise<{ 
+  success: boolean; 
+  hasConflict: boolean; 
+  conflicts?: Array<{ 
+    id: string; 
+    startDate: string; 
+    endDate: string; 
+    userName: string; 
+  }>; 
+  error?: string; 
+}> {
+  try {
+    await requireAuth();
+    
+    const result = await checkForConflicts(input.startDate, input.endDate);
+    
+    return {
+      success: true,
+      hasConflict: result.hasConflict,
+      conflicts: result.conflicts?.map(conflict => ({
+        id: conflict.id,
+        startDate: conflict.startDate,
+        endDate: conflict.endDate,
+        userName: conflict.user?.name || 'Unknown User',
+      })),
+    };
+  } catch (error) {
+    console.error('Error checking conflicts:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to check conflicts';
+    return { success: false, hasConflict: false, error: errorMessage };
   }
 }
 

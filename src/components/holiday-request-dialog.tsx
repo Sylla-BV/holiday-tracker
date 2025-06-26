@@ -34,12 +34,15 @@ import { Calendar } from '@/components/ui/calendar';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { CalendarIcon, Loader2, Wand2, Forward, AlertTriangle } from 'lucide-react';
+import { CalendarIcon, Loader2, Forward, AlertTriangle } from 'lucide-react';
+// Temporarily disabled AI suggestion icons
+// import { Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { addDays, format } from 'date-fns';
 import { toast } from 'sonner';
-import { handleRequestTimeOff } from '@/app/actions';
-import type { SuggestAlternativeDatesOutput } from '@/ai/flows/suggest-alternative-dates';
+import { handleRequestTimeOff, checkHolidayConflicts } from '@/app/actions';
+// Temporarily disabled AI suggestions
+// import type { SuggestAlternativeDatesOutput } from '@/ai/flows/suggest-alternative-dates';
 
 const formSchema = z.object({
   startDate: z.date({ required_error: 'A start date is required.' }),
@@ -51,10 +54,21 @@ const formSchema = z.object({
   path: ["endDate"],
 });
 
+type ConflictData = {
+  id: string;
+  startDate: string;
+  endDate: string;
+  userName: string;
+};
+
 export function HolidayRequestDialog() {
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [aiSuggestions, setAiSuggestions] = useState<SuggestAlternativeDatesOutput | null>(null);
+  const [conflicts, setConflicts] = useState<ConflictData[]>([]);
+  const [showConflicts, setShowConflicts] = useState(false);
+  const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
+  // Temporarily disabled AI suggestions
+  // const [aiSuggestions, setAiSuggestions] = useState<SuggestAlternativeDatesOutput | null>(null);
   const [startDateOpen, setStartDateOpen] = useState(false);
   const [endDateOpen, setEndDateOpen] = useState(false);
 
@@ -68,9 +82,41 @@ export function HolidayRequestDialog() {
   
   const { startDate } = form.watch();
 
+  async function checkForConflicts(values: z.infer<typeof formSchema>) {
+    setIsCheckingConflicts(true);
+    
+    try {
+      const conflictResult = await checkHolidayConflicts({
+        startDate: values.startDate,
+        endDate: values.endDate,
+      });
+      
+      if (conflictResult.success && conflictResult.hasConflict && conflictResult.conflicts) {
+        setConflicts(conflictResult.conflicts);
+        setShowConflicts(true);
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error checking conflicts:', error);
+      return false;
+    } finally {
+      setIsCheckingConflicts(false);
+    }
+  }
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    // If we haven't checked for conflicts yet, check first
+    if (!showConflicts) {
+      const hasConflicts = await checkForConflicts(values);
+      if (hasConflicts) {
+        return;
+      }
+    }
+    
+    // Proceed with submission
     setIsLoading(true);
-    setAiSuggestions(null);
 
     const result = await handleRequestTimeOff(values);
 
@@ -82,8 +128,8 @@ export function HolidayRequestDialog() {
       });
       setOpen(false);
       form.reset();
-    } else if (result.suggestions) {
-      setAiSuggestions(result.suggestions);
+      setShowConflicts(false);
+      setConflicts([]);
     } else {
       toast.error('An error occurred', {
         description: result.error || 'Failed to process your request.'
@@ -91,18 +137,22 @@ export function HolidayRequestDialog() {
     }
   }
   
-  const handleSelectSuggestion = (range: { start: string, end: string }) => {
-    form.setValue('startDate', new Date(range.start));
-    form.setValue('endDate', new Date(range.end));
-    setAiSuggestions(null);
-  }
+  // Temporarily disabled AI suggestions
+  // const handleSelectSuggestion = (range: { start: string, end: string }) => {
+  //   form.setValue('startDate', new Date(range.start));
+  //   form.setValue('endDate', new Date(range.end));
+  //   setAiSuggestions(null);
+  // }
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
         setOpen(isOpen);
         if (!isOpen) {
             form.reset();
-            setAiSuggestions(null);
+            setShowConflicts(false);
+            setConflicts([]);
+            // Temporarily disabled AI suggestions
+            // setAiSuggestions(null);
         }
     }}>
       <DialogTrigger asChild>
@@ -112,36 +162,48 @@ export function HolidayRequestDialog() {
         <DialogHeader>
           <DialogTitle>Request Time Off</DialogTitle>
           <DialogDescription>
-            {aiSuggestions ? 'There is a conflict with your request. Here are some AI-powered suggestions.' : 'Fill out the form below to request time off.'}
+            Fill out the form below to request time off.
           </DialogDescription>
         </DialogHeader>
-        {aiSuggestions ? (
-             <div className="space-y-4 py-4">
-                <div className="p-4 bg-yellow-50 border-l-4 border-yellow-400">
-                    <div className="flex items-start gap-3">
-                        <AlertTriangle className="h-5 w-5 text-yellow-500 mt-1" />
-                        <div>
-                            <h4 className="font-semibold text-yellow-800">Scheduling Conflict</h4>
-                            <p className="text-sm text-yellow-700">{aiSuggestions.reasoning}</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <h3 className="font-semibold flex items-center gap-2"><Wand2 className="h-5 w-5 text-primary" /> Alternative Dates</h3>
-                <div className="space-y-2">
-                    {aiSuggestions.alternativeDates.map((range, index) => (
-                        <div key={index} className="flex items-center justify-between p-3 bg-secondary rounded-lg">
-                            <p className="font-medium">{format(new Date(range.start), 'MMM d')} - {format(new Date(range.end), 'MMM d, yyyy')}</p>
-                            <Button size="sm" variant="outline" onClick={() => handleSelectSuggestion(range)}>Select</Button>
-                        </div>
-                    ))}
-                </div>
-                <Button variant="ghost" onClick={() => setAiSuggestions(null)} className="w-full">
-                    Ignore and proceed with original dates
-                </Button>
+        
+        {showConflicts && conflicts.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <h4 className="font-medium text-amber-800">Scheduling Conflicts Detected</h4>
             </div>
-        ) : (
-          <Form {...form}>
+            <p className="text-sm text-amber-700 mb-3">
+              The following team members already have approved time off during your requested dates:
+            </p>
+            <div className="space-y-2 mb-3">
+              {conflicts.map((conflict) => (
+                <div key={conflict.id} className="flex items-center justify-between bg-white rounded p-2 text-sm">
+                  <span className="font-medium">{conflict.userName}</span>
+                  <span className="text-gray-600">
+                    {format(new Date(conflict.startDate), 'MMM d')} - {format(new Date(conflict.endDate), 'MMM d')}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="text-sm text-amber-700 mb-3">
+              You can still submit this request, but please confirm you want to proceed despite the conflicts.
+            </p>
+            <Button 
+              type="button" 
+              variant="outline" 
+              size="sm" 
+              onClick={() => {
+                setShowConflicts(false);
+                setConflicts([]);
+              }}
+            >
+              Choose Different Dates
+            </Button>
+          </div>
+        )}
+        
+        {/* Temporarily disabled AI suggestions UI */}
+        <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <FormField
@@ -280,22 +342,30 @@ export function HolidayRequestDialog() {
                 <DialogClose asChild>
                     <Button type="button" variant="ghost">Cancel</Button>
                 </DialogClose>
-                <Button type="submit" disabled={isLoading}>
-                  {isLoading ? (
+                <Button type="submit" disabled={isLoading || isCheckingConflicts}>
+                  {isCheckingConflicts ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Checking...
+                      Checking conflicts...
+                    </>
+                  ) : isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : showConflicts ? (
+                    <>
+                      Confirm Request <Forward className="ml-2 h-4 w-4" />
                     </>
                   ) : (
                     <>
-                      Submit Request <Forward className="ml-2 h-4 w-4" />
+                      Check & Submit <Forward className="ml-2 h-4 w-4" />
                     </>
                   )}
                 </Button>
               </DialogFooter>
             </form>
           </Form>
-        )}
       </DialogContent>
     </Dialog>
   );
