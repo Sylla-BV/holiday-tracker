@@ -1,5 +1,7 @@
 'use client';
 
+import { useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -12,10 +14,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LogOut, User, Crown } from 'lucide-react';
-import Link from 'next/link';
 
 export default function UserMenu() {
   const { data: session } = useSession();
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
 
   if (!session?.user) {
     return null;
@@ -23,6 +26,12 @@ export default function UserMenu() {
 
   const handleSignOut = () => {
     signOut({ callbackUrl: '/auth/signin' });
+  };
+
+  const handleAdminDashboard = () => {
+    startTransition(() => {
+      router.push('/admin');
+    });
   };
 
   const getInitials = (name: string) => {
@@ -56,11 +65,9 @@ export default function UserMenu() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/admin">
-            <Crown className="mr-2 h-4 w-4" />
-            <span>Admin Dashboard</span>
-          </Link>
+        <DropdownMenuItem onClick={handleAdminDashboard} disabled={isPending}>
+          <Crown className="mr-2 h-4 w-4" />
+          <span>{isPending ? 'Loading...' : 'Admin Dashboard'}</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut}>
