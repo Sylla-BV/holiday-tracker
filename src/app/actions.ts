@@ -80,32 +80,12 @@ export async function getHolidayRequests() {
   try {
     // Verify authentication
     await requireAuth();
-    
-    const requests = await db
-      .select({
-        id: holidayRequests.id,
-        userId: holidayRequests.userId,
-        startDate: holidayRequests.startDate,
-        endDate: holidayRequests.endDate,
-        leaveType: holidayRequests.leaveType,
-        status: holidayRequests.status,
-        notes: holidayRequests.notes,
-        approvedBy: holidayRequests.approvedBy,
-        createdAt: holidayRequests.createdAt,
-        updatedAt: holidayRequests.updatedAt,
-        user: {
-          id: users.id,
-          name: users.name,
-          email: users.email,
-          emailVerified: users.emailVerified,
-          image: users.image,
-          role: users.role,
-          createdAt: users.createdAt,
-          updatedAt: users.updatedAt,
-        },
-      })
-      .from(holidayRequests)
-      .leftJoin(users, eq(holidayRequests.userId, users.id));
+
+    // Use Drizzle ORM's db.query syntax for left join and filtering
+    const requests = await db.query.holidayRequests.findMany({
+      with: { user: true },
+      where: (table, { ne }) => ne(table.status, 'rejected'),
+    });
 
     return { success: true, data: requests };
   } catch (error) {
@@ -130,17 +110,15 @@ export async function createHolidayRequest(input: RequestTimeOffInput) {
 
     const { startDate, endDate, leaveType, notes } = parsedInput.data;
 
-    // Check for conflicts before creating the request
     const conflicts = await checkForConflicts(startDate, endDate);
     
     if (conflicts.hasConflict) {
       // Generate AI suggestions for alternative dates
       try {
-        const allUsers = await db.select().from(users);
-        const allRequests = await db
-          .select()
-          .from(holidayRequests)
-          .where(eq(holidayRequests.status, 'approved'));
+        const allUsers = await db.query.users.findMany();
+        const allRequests = await db.query.holidayRequests.findMany({
+          where: (table, { eq }) => eq(table.status, 'approved'),
+        });
 
         const teamDataForAI = allUsers.map(user => ({
           name: user.name || 'Unknown User',
@@ -470,5 +448,92 @@ function getLeaveTypeEmoji(leaveType: string): string {
       return '👨‍👶';
     default:
       return '📅';
+  }
+}
+
+/**
+ * Admin action to update user role
+ */
+export async function updateUserRole(userId: string, role: 'admin' | 'member'): Promise<{ success: boolean; error?: string }> {
+  try {
+    const currentUserId = await requireAuth();
+    
+    // Check if current user is admin
+    const currentUser = await db.query.users.findFirst({
+      where: eq(users.id, currentUserId),
+    });
+
+    if (!currentUser || currentUser.role !== 'admin') {
+      return { success: false, error: 'Admin access required' };
+    }
+
+    if (!userId || !role || !['admin', 'member'].includes(role)) {
+      return { success: false, error: 'Invalid data' };
+    }
+
+    // Update user role
+    const [updatedUser] = await db
+      .update(users)
+      .set({ role, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+
+    if (!updatedUser) {
+      return { success: false, error: 'User not found' };
+    }
+
+    revalidatePath('/admin');
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating user role:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update user role';
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Admin action to approve or reject holiday requests
+ */
+export async function updateRequestStatus(requestId: string, status: 'approved' | 'rejected'): Promise<{ success: boolean; error?: string }> {
+  try {
+    const currentUserId = await requireAuth();
+    
+    // Check if current user is admin
+    const currentUser = await db.query.users.findFirst({
+      where: eq(users.id, currentUserId),
+    });
+
+    if (!currentUser || currentUser.role !== 'admin') {
+      return { success: false, error: 'Admin access required' };
+    }
+
+    if (!requestId || !status || !['approved', 'rejected'].includes(status)) {
+      return { success: false, error: 'Invalid data' };
+    }
+
+    // Update the holiday request status
+    const [updatedRequest] = await db
+      .update(holidayRequests)
+      .set({ 
+        status, 
+        approvedBy: currentUserId,
+        updatedAt: new Date(),
+      })
+      .where(eq(holidayRequests.id, requestId))
+      .returning();
+
+    if (!updatedRequest) {
+      return { success: false, error: 'Request not found' };
+    }
+
+    // Revalidate pages to show updated data
+    revalidatePath('/admin');
+    revalidatePath('/');
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating request status:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update request status';
+    return { success: false, error: errorMessage };
   }
 }
