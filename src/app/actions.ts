@@ -158,9 +158,12 @@ export async function createHolidayRequest(input: RequestTimeOffInput) {
 
     const { startDate, endDate, leaveType, notes } = parsedInput.data;
 
+    // Check if user is admin
+    const isAdmin = await isUserAdmin(userId);
+
     const conflicts = await checkForConflicts(startDate, endDate);
     
-    if (conflicts.hasConflict) {
+    if (conflicts.hasConflict && !isAdmin) {
       // AI suggestions temporarily disabled - just return conflict error
       return { success: false, error: 'Scheduling conflict detected. Please choose different dates.' };
       
@@ -198,7 +201,7 @@ export async function createHolidayRequest(input: RequestTimeOffInput) {
       */
     }
 
-    // Create the holiday request
+    // Create the holiday request with automatic approval for admins
     const [newRequest] = await db
       .insert(holidayRequests)
       .values({
@@ -207,7 +210,8 @@ export async function createHolidayRequest(input: RequestTimeOffInput) {
         endDate,
         leaveType,
         notes: notes || null,
-        status: 'pending',
+        status: isAdmin ? 'approved' : 'pending',
+        approvedBy: isAdmin ? userId : null,
       })
       .returning();
 
@@ -265,6 +269,21 @@ export async function updateHolidayRequestStatus(input: UpdateStatusInput) {
     console.error('Error updating holiday request status:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to update holiday request status';
     return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Check if a user is an admin
+ */
+async function isUserAdmin(userId: string): Promise<boolean> {
+  try {
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+    return user?.role === 'admin';
+  } catch (error) {
+    console.error('Error checking user admin status:', error);
+    return false;
   }
 }
 
