@@ -23,8 +23,8 @@ export const users = pgTable('users', {
 export const holidayRequests = pgTable('holiday_requests', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  startDate: date('start_date').notNull(),
-  endDate: date('end_date').notNull(),
+  startDate: date('start_date', { mode: 'string' }).notNull(),
+  endDate: date('end_date', { mode: 'string' }).notNull(),
   leaveType: leaveTypeEnum('leave_type').notNull(),
   status: statusEnum('status').notNull().default('pending'),
   notes: text('notes'),
@@ -93,8 +93,8 @@ export type NewHolidayRequest = typeof holidayRequests.$inferInsert;
 // Transformed holiday request type for client components
 export type TransformedHolidayRequest = {
   id: string;
-  startDate: Date;
-  endDate: Date;
+  startDate: string;
+  endDate: string;
   type: string; // Display-friendly type (e.g., "Vacation", "Sick Leave")
   status: string; // Display-friendly status (e.g., "Approved", "Pending")
   user: User;

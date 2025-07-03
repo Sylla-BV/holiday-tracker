@@ -85,10 +85,18 @@ export function HolidayRequestDialog() {
   async function checkForConflicts(values: z.infer<typeof formSchema>) {
     setIsCheckingConflicts(true);
     
+    // Format dates to YYYY-MM-DD string without timezone conversion
+    const formatDateToString = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
     try {
       const conflictResult = await checkHolidayConflicts({
-        startDate: values.startDate,
-        endDate: values.endDate,
+        startDate: formatDateToString(values.startDate),
+        endDate: formatDateToString(values.endDate),
       });
       
       if (conflictResult.success && conflictResult.hasConflict && conflictResult.conflicts) {
@@ -118,7 +126,20 @@ export function HolidayRequestDialog() {
     // Proceed with submission
     setIsLoading(true);
 
-    const result = await handleRequestTimeOff(values);
+    // Format dates to YYYY-MM-DD string without timezone conversion
+    const formatDateToString = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const result = await handleRequestTimeOff({
+      startDate: formatDateToString(values.startDate),
+      endDate: formatDateToString(values.endDate),
+      leaveType: values.leaveType,
+      notes: values.notes,
+    });
 
     setIsLoading(false);
     

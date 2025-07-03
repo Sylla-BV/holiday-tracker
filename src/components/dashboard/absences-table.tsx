@@ -42,8 +42,8 @@ export default function AbsencesTable({ usersPromise, holidayRequestsPromise }: 
 
   // Data is already transformed on the server-side, just need filtering and sorting
   const allAbsences = holidayRequests
-    .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
-    .filter(absence => isFuture(absence.endDate) || absence.status === 'Pending');
+    .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
+    .filter(absence => isFuture(new Date(absence.endDate)) || absence.status === 'Pending');
 
   return (
     <Card>

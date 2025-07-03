@@ -49,10 +49,10 @@ export default function TeamCalendar({ usersPromise, holidayRequestsPromise, cla
   const modifiers = {
     approved: allAbsences
       .filter(a => a.status === 'Approved')
-      .map(a => ({ from: a.startDate, to: a.endDate })),
+      .map(a => ({ from: new Date(a.startDate), to: new Date(a.endDate) })),
     pending: allAbsences
       .filter(a => a.status === 'Pending')
-      .map(a => ({ from: a.startDate, to: a.endDate })),
+      .map(a => ({ from: new Date(a.startDate), to: new Date(a.endDate) })),
   };
 
   const modifierStyles = {
@@ -62,8 +62,8 @@ export default function TeamCalendar({ usersPromise, holidayRequestsPromise, cla
 
   const absencesOnSelectedDay = allAbsences.filter(absence => 
     isWithinInterval(startOfDay(selectedDate), { 
-      start: startOfDay(absence.startDate), 
-      end: startOfDay(absence.endDate) 
+      start: startOfDay(new Date(absence.startDate)), 
+      end: startOfDay(new Date(absence.endDate)) 
     })
   );
 

@@ -43,11 +43,9 @@ export const authOptions: NextAuthOptions = {
       if (account?.provider === 'google') {
         const email = user.email || profile?.email;
         if (email && !email.endsWith('@sylla.io')) {
-          console.log('debug signIn', email, 'is not a sylla.io email');
           return false;
         }
       }
-      console.log('debug signIn', user.email || profile?.email);
       return true;
     },
   },

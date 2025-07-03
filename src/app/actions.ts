@@ -11,17 +11,17 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 
 const requestSchema = z.object({
-  startDate: z.date({
+  startDate: z.string({
     required_error: 'Start date is required',
-    invalid_type_error: 'Start date must be a valid date',
-  }),
-  endDate: z.date({
+    invalid_type_error: 'Start date must be a valid date string',
+  }).regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must be in YYYY-MM-DD format'),
+  endDate: z.string({
     required_error: 'End date is required',
-    invalid_type_error: 'End date must be a valid date',
-  }),
+    invalid_type_error: 'End date must be a valid date string',
+  }).regex(/^\d{4}-\d{2}-\d{2}$/, 'End date must be in YYYY-MM-DD format'),
   leaveType: z.enum(['annual', 'sick', 'personal', 'maternity', 'paternity', 'other', 'public']),
   notes: z.string().optional(),
-}).refine((data) => data.endDate >= data.startDate, {
+}).refine((data) => new Date(data.endDate) >= new Date(data.startDate), {
   message: 'End date must be after or equal to start date',
   path: ['endDate'],
 });
@@ -72,6 +72,8 @@ export async function getUsers() {
     return { success: false, error: errorMessage };
   }
 }
+
+
 
 /**
  * Map database leave types to display strings
@@ -128,14 +130,9 @@ export async function getHolidayRequests() {
     const transformedRequests = requests
       .filter(request => request.user) // Only include requests with valid users
       .map(request => ({
-        id: request.id,
-        startDate: new Date(request.startDate),
-        endDate: new Date(request.endDate),
+        ...request,
         type: mapLeaveTypeToDisplay(request.leaveType),
         status: mapStatusToDisplay(request.status),
-        user: request.user!,
-        // Keep original fields for backward compatibility
-        leaveType: request.leaveType,
         dbStatus: request.status,
       }));
 
@@ -152,7 +149,6 @@ export async function getHolidayRequests() {
  */
 export async function createHolidayRequest(input: RequestTimeOffInput) {
   try {
-    // Verify authentication first
     const userId = await requireAuth();
     
     const parsedInput = requestSchema.safeParse(input);
@@ -207,8 +203,8 @@ export async function createHolidayRequest(input: RequestTimeOffInput) {
       .insert(holidayRequests)
       .values({
         userId,
-        startDate: startDate.toISOString().split('T')[0],
-        endDate: endDate.toISOString().split('T')[0],
+        startDate,
+        endDate,
         leaveType,
         notes: notes || null,
         status: 'pending',
@@ -275,10 +271,8 @@ export async function updateHolidayRequestStatus(input: UpdateStatusInput) {
 /**
  * Check for conflicts with existing approved holiday requests
  */
-async function checkForConflicts(startDate: Date, endDate: Date): Promise<{ hasConflict: boolean; conflicts?: any[] }> {
+async function checkForConflicts(startDate: string, endDate: string): Promise<{ hasConflict: boolean; conflicts?: any[] }> {
   try {
-    const startDateStr = startDate.toISOString().split('T')[0];
-    const endDateStr = endDate.toISOString().split('T')[0];
     
     const conflicts = await db.query.holidayRequests.findMany({
       columns: {
@@ -295,8 +289,8 @@ async function checkForConflicts(startDate: Date, endDate: Date): Promise<{ hasC
       },
       where: (table, { and, eq, lte, gte }) => and(
         eq(table.status, 'approved'),
-        lte(table.startDate, endDateStr),
-        gte(table.endDate, startDateStr)
+        lte(table.startDate, endDate),
+        gte(table.endDate, startDate)
       )
     });
 
@@ -314,12 +308,10 @@ async function checkForConflicts(startDate: Date, endDate: Date): Promise<{ hasC
  * Main entry point for handling holiday requests from the frontend
  * Accepts Date objects and handles authentication
  */
-export async function handleRequestTimeOff(input: { startDate: Date; endDate: Date; leaveType: string; notes?: string }) {
+export async function handleRequestTimeOff(input: { startDate: string; endDate: string; leaveType: string; notes?: string }) {
   try {
-    // Verify authentication first
     await requireAuth();
     
-    // Convert the input format to match our schema
     const mappedInput: RequestTimeOffInput = {
       startDate: input.startDate,
       endDate: input.endDate,
@@ -403,8 +395,7 @@ export async function sendSlackMessage(message: string): Promise<{ success: bool
  */
 export async function getUsersOutOfOfficeToday(): Promise<{ success: boolean; users?: any[]; error?: string }> {
   try {
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
     
     const usersOutToday = await db
       .select({
@@ -420,8 +411,8 @@ export async function getUsersOutOfOfficeToday(): Promise<{ success: boolean; us
       .where(
         and(
           eq(holidayRequests.status, 'approved'),
-          lte(holidayRequests.startDate, todayStr),
-          gte(holidayRequests.endDate, todayStr)
+          lte(holidayRequests.startDate, today),
+          gte(holidayRequests.endDate, today)
         )
       );
 
@@ -549,7 +540,7 @@ export async function updateUserRole(userId: string, role: 'admin' | 'member'): 
 /**
  * Check for conflicts with existing approved holiday requests (public function)
  */
-export async function checkHolidayConflicts(input: { startDate: Date; endDate: Date }): Promise<{ 
+export async function checkHolidayConflicts(input: { startDate: string; endDate: string }): Promise<{ 
   success: boolean; 
   hasConflict: boolean; 
   conflicts?: Array<{ 
