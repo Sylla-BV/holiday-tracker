@@ -1,11 +1,12 @@
 'use client';
 
-import { PlaneTakeoff } from 'lucide-react';
+import { PlaneTakeoff, Calendar } from 'lucide-react';
 import { HolidayRequestDialog } from '@/components/holiday-request-dialog';
 import UserMenu from '@/components/auth/user-menu';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { Button } from '@/components/ui/button';
 
 export default function Header() {
   const { data: session } = useSession();
@@ -22,7 +23,17 @@ export default function Header() {
       </Link>
       
       <div className="flex items-center gap-4">
-        {session && <HolidayRequestDialog />}
+        {session && (
+          <>
+            <Button asChild variant="outline" className="hidden sm:flex">
+              <Link href="/my-time-off" className="flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                My Time Off
+              </Link>
+            </Button>
+            <HolidayRequestDialog />
+          </>
+        )}
         <UserMenu />
       </div>
     </header>

@@ -638,3 +638,251 @@ export async function updateRequestStatus(requestId: string, status: 'approved' 
     return { success: false, error: errorMessage };
   }
 }
+
+/**
+ * Get all holiday requests for the current user (or specific user if admin)
+ */
+export async function getUserTimeOffRequests(userId?: string): Promise<{ 
+  success: boolean; 
+  data?: Array<{
+    id: string;
+    startDate: string;
+    endDate: string;
+    leaveType: string;
+    type: string;
+    notes: string | null;
+    status: string;
+    dbStatus: string;
+    createdAt: Date;
+    updatedAt: Date;
+    approvedBy: string | null;
+    user: {
+      id: string;
+      name: string | null;
+      email: string | null;
+    } | null;
+  }>; 
+  error?: string; 
+}> {
+  try {
+    const currentUserId = await requireAuth();
+    
+    // Determine which user's requests to fetch
+    let targetUserId = currentUserId;
+    
+    if (userId && userId !== currentUserId) {
+      // Check if current user is admin to access another user's requests
+      const currentUser = await db.query.users.findFirst({
+        where: eq(users.id, currentUserId),
+      });
+      
+      if (!currentUser || currentUser.role !== 'admin') {
+        return { success: false, error: 'Admin access required to view other users requests' };
+      }
+      
+      targetUserId = userId;
+    }
+
+    // Fetch the user's holiday requests
+    const requests = await db.query.holidayRequests.findMany({
+      with: { user: true },
+      where: (table, { eq }) => eq(table.userId, targetUserId),
+      orderBy: (table, { desc }) => [desc(table.createdAt)],
+    });
+
+    // Transform data to match the expected format
+    const transformedRequests = requests.map(request => ({
+      ...request,
+      type: mapLeaveTypeToDisplay(request.leaveType),
+      status: mapStatusToDisplay(request.status),
+      dbStatus: request.status,
+    }));
+
+    return { success: true, data: transformedRequests };
+  } catch (error) {
+    console.error('Error fetching user time off requests:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch time off requests';
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Cancel a pending or future approved holiday request
+ */
+export async function cancelHolidayRequest(requestId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const currentUserId = await requireAuth();
+    
+    // Validate input
+    if (!requestId) {
+      return { success: false, error: 'Request ID is required' };
+    }
+
+    // Find the request to ensure it exists and get its details
+    const request = await db.query.holidayRequests.findFirst({
+      where: eq(holidayRequests.id, requestId),
+    });
+
+    if (!request) {
+      return { success: false, error: 'Holiday request not found' };
+    }
+
+    // Check if the current user owns this request or is an admin
+    const currentUser = await db.query.users.findFirst({
+      where: eq(users.id, currentUserId),
+    });
+
+    const isAdmin = currentUser?.role === 'admin';
+    const isOwner = request.userId === currentUserId;
+
+    if (!isOwner && !isAdmin) {
+      return { success: false, error: 'You can only cancel your own holiday requests' };
+    }
+
+    // Check if the request can be cancelled (not already rejected or past)
+    if (request.status === 'rejected') {
+      return { success: false, error: 'Cannot cancel an already rejected request' };
+    }
+
+    // Check if the request is in the past
+    const today = new Date().toISOString().split('T')[0];
+    if (request.startDate < today) {
+      return { success: false, error: 'Cannot cancel a request that has already started' };
+    }
+
+    // Update the request status to rejected (cancelled)
+    const [updatedRequest] = await db
+      .update(holidayRequests)
+      .set({ 
+        status: 'rejected',
+        updatedAt: new Date(),
+      })
+      .where(eq(holidayRequests.id, requestId))
+      .returning();
+
+    if (!updatedRequest) {
+      return { success: false, error: 'Failed to cancel holiday request' };
+    }
+
+    // Revalidate pages to show updated data
+    revalidatePath('/my-time-off');
+    revalidatePath('/');
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error cancelling holiday request:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to cancel holiday request';
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Calculate PTO balance for user (mock calculation for now since we don't have accrual rules)
+ */
+export async function calculatePtoBalance(userId?: string): Promise<{ 
+  success: boolean; 
+  data?: {
+    totalAllowance: number;
+    usedDays: number;
+    remainingDays: number;
+    pendingDays: number;
+    details: {
+      approvedRequests: number;
+      pendingRequests: number;
+    };
+  }; 
+  error?: string; 
+}> {
+  try {
+    const currentUserId = await requireAuth();
+    
+    // Determine which user's balance to calculate
+    let targetUserId = currentUserId;
+    
+    if (userId && userId !== currentUserId) {
+      // Check if current user is admin to access another user's balance
+      const currentUser = await db.query.users.findFirst({
+        where: eq(users.id, currentUserId),
+      });
+      
+      if (!currentUser || currentUser.role !== 'admin') {
+        return { success: false, error: 'Admin access required to view other users PTO balance' };
+      }
+      
+      targetUserId = userId;
+    }
+
+    // Get the current year for calculation
+    const currentYear = new Date().getFullYear();
+    const yearStart = `${currentYear}-01-01`;
+    const yearEnd = `${currentYear}-12-31`;
+
+    // Fetch approved requests for the current year
+    const approvedRequests = await db.query.holidayRequests.findMany({
+      where: (table, { and, eq, gte, lte }) => and(
+        eq(table.userId, targetUserId),
+        eq(table.status, 'approved'),
+        eq(table.leaveType, 'annual'), // Only count annual leave for PTO balance
+        gte(table.startDate, yearStart),
+        lte(table.startDate, yearEnd)
+      ),
+    });
+
+    // Fetch pending requests for the current year
+    const pendingRequests = await db.query.holidayRequests.findMany({
+      where: (table, { and, eq, gte, lte }) => and(
+        eq(table.userId, targetUserId),
+        eq(table.status, 'pending'),
+        eq(table.leaveType, 'annual'), // Only count annual leave for PTO balance
+        gte(table.startDate, yearStart),
+        lte(table.startDate, yearEnd)
+      ),
+    });
+
+    // Calculate weekdays only (excluding weekends) for vacation requests
+    const calculateWeekdays = (requests: typeof approvedRequests) => {
+      return requests.reduce((total, request) => {
+        const startDate = new Date(request.startDate);
+        const endDate = new Date(request.endDate);
+        
+        let weekdaysCount = 0;
+        let currentDate = new Date(startDate);
+        
+        while (currentDate <= endDate) {
+          const dayOfWeek = currentDate.getDay();
+          // 0 = Sunday, 6 = Saturday, so we want 1-5 (Monday-Friday)
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+            weekdaysCount++;
+          }
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
+        return total + weekdaysCount;
+      }, 0);
+    };
+
+    const usedDays = calculateWeekdays(approvedRequests);
+    const pendingDays = calculateWeekdays(pendingRequests);
+
+    // Mock total allowance (in a real system, this would come from user settings or company policy)
+    const totalAllowance = 25; // Standard 25 working days per year
+    const remainingDays = Math.max(0, totalAllowance - usedDays);
+
+    const balanceData = {
+      totalAllowance,
+      usedDays,
+      remainingDays,
+      pendingDays,
+      details: {
+        approvedRequests: approvedRequests.length,
+        pendingRequests: pendingRequests.length,
+      },
+    };
+
+    return { success: true, data: balanceData };
+  } catch (error) {
+    console.error('Error calculating PTO balance:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to calculate PTO balance';
+    return { success: false, error: errorMessage };
+  }
+}
