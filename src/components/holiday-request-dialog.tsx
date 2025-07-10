@@ -233,7 +233,7 @@ export function HolidayRequestDialog() {
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Start Date</FormLabel>
-                      <Popover open={startDateOpen} onOpenChange={setStartDateOpen}>
+                      <Popover open={startDateOpen} onOpenChange={setStartDateOpen} modal={true}>
                         <PopoverTrigger asChild>
                           <Button
                             variant={'outline'}
@@ -241,6 +241,10 @@ export function HolidayRequestDialog() {
                               'justify-start text-left font-normal',
                               !field.value && 'text-muted-foreground'
                             )}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setStartDateOpen(!startDateOpen);
+                            }}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
                             {field.value ? (
@@ -250,7 +254,11 @@ export function HolidayRequestDialog() {
                             )}
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
+                        <PopoverContent 
+                          className="w-auto p-0" 
+                          align="start"
+                          onCloseAutoFocus={(e) => e.preventDefault()}
+                        >
                           <Calendar
                             mode="single"
                             selected={field.value}
@@ -281,7 +289,7 @@ export function HolidayRequestDialog() {
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>End Date</FormLabel>
-                      <Popover open={endDateOpen} onOpenChange={setEndDateOpen}>
+                      <Popover open={endDateOpen} onOpenChange={setEndDateOpen} modal={true}>
                         <PopoverTrigger asChild>
                           <Button
                             variant={'outline'}
@@ -289,6 +297,10 @@ export function HolidayRequestDialog() {
                               'justify-start text-left font-normal',
                               !field.value && 'text-muted-foreground'
                             )}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setEndDateOpen(!endDateOpen);
+                            }}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
                             {field.value ? (
@@ -298,7 +310,11 @@ export function HolidayRequestDialog() {
                             )}
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
+                        <PopoverContent 
+                          className="w-auto p-0" 
+                          align="start"
+                          onCloseAutoFocus={(e) => e.preventDefault()}
+                        >
                           <Calendar
                             mode="single"
                             selected={field.value}
