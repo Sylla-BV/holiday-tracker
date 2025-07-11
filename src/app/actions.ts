@@ -454,17 +454,9 @@ export async function sendDailyOutOfOfficeReport(): Promise<{ success: boolean; 
       return { success: false, error: result.error || 'Failed to get out of office users' };
     }
 
-    // If no one is out of office, send a cheerful fallback message
+    // If no one is out of office, return early without sending a message
     if (result.users.length === 0) {
-      const today = new Date().toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      });
-      const message = `🎉 *Out of Office Report - ${today}*\n\nEveryone is present today!`;
-      const slackResult = await sendSlackMessage(message);
-      return slackResult;
+      return { success: true };
     }
 
     const today = new Date().toLocaleDateString('en-US', { 

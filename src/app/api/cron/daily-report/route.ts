@@ -11,6 +11,28 @@ export async function GET(request: NextRequest) {
 
     console.log('Starting daily out of office report...');
     
+    // First check if anyone is out of office today
+    const { getUsersOutOfOfficeToday } = await import('@/app/actions');
+    const checkResult = await getUsersOutOfOfficeToday();
+    
+    if (!checkResult.success || !checkResult.users) {
+      console.error('Failed to check out of office users:', checkResult.error);
+      return NextResponse.json({ 
+        success: false, 
+        error: checkResult.error || 'Failed to check out of office users' 
+      }, { status: 500 });
+    }
+    
+    // If nobody is out of office, skip sending the report
+    if (checkResult.users.length === 0) {
+      console.log('No one is out of office today - skipping daily report');
+      return NextResponse.json({ 
+        success: true, 
+        message: 'No one out of office - daily report skipped' 
+      });
+    }
+    
+    // Send the daily report
     const result = await sendDailyOutOfOfficeReport();
     
     if (result.success) {
