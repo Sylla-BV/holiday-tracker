@@ -163,43 +163,9 @@ export async function createHolidayRequest(input: RequestTimeOffInput) {
 
     const conflicts = await checkForConflicts(startDate, endDate);
     
-    if (conflicts.hasConflict && !isAdmin) {
-      // AI suggestions temporarily disabled - just return conflict error
-      return { success: false, error: 'Scheduling conflict detected. Please choose different dates.' };
-      
-      /* Temporarily disabled AI suggestions
-      // Generate AI suggestions for alternative dates
-      try {
-        const allUsers = await db.query.users.findMany();
-        const allRequests = await db.query.holidayRequests.findMany({
-          where: (table, { eq }) => eq(table.status, 'approved'),
-        });
-
-        const teamDataForAI = allUsers.map(user => ({
-          name: user.name || 'Unknown User',
-          absences: allRequests
-            .filter(req => req.userId === user.id)
-            .map(req => ({
-              start: req.startDate,
-              end: req.endDate,
-            })),
-        }));
-
-        const currentUser = allUsers.find(user => user.id === userId);
-        const suggestions = await suggestAlternativeDates({
-          startDate: startDate.toISOString().split('T')[0],
-          endDate: endDate.toISOString().split('T')[0],
-          teamMembers: teamDataForAI,
-          requesterName: currentUser?.name || 'User',
-        });
-
-        return { success: false, suggestions };
-      } catch (aiError) {
-        console.error('AI suggestion error:', aiError);
-        return { success: false, error: 'Scheduling conflict detected, but could not generate suggestions.' };
-      }
-      */
-    }
+    // Only check for conflicts - don't block submission
+    // Admin requests are auto-approved regardless of conflicts
+    // Non-admin requests can proceed with conflicts (manager will decide)
 
     // Create the holiday request with automatic approval for admins
     const [newRequest] = await db
