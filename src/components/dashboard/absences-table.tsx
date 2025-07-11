@@ -5,7 +5,7 @@ import type { User, TransformedHolidayRequest } from '@/lib/schema';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { format, isFuture } from 'date-fns';
+import { format, isFuture, addMonths, isAfter } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 
 type AbsencesTableProps = {
@@ -41,9 +41,14 @@ export default function AbsencesTable({ usersPromise, holidayRequestsPromise }: 
   const holidayRequests = holidayRequestsResult.data || [];
 
   // Data is already transformed on the server-side, just need filtering and sorting
+  const threeMonthsFromNow = addMonths(new Date(), 3);
   const allAbsences = holidayRequests
     .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
-    .filter(absence => isFuture(new Date(absence.endDate)) || absence.status === 'Pending');
+    .filter(absence => {
+      const startDate = new Date(absence.startDate);
+      return (isFuture(new Date(absence.endDate)) || absence.status === 'Pending') 
+        && !isAfter(startDate, threeMonthsFromNow);
+    });
 
   return (
     <Card>
