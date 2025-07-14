@@ -1,5 +1,6 @@
 import { db } from './db';
 import { users, holidayRequests } from './schema';
+import { syncHolidaysForAllActiveCountries } from './holiday-service';
 import 'dotenv/config';
 
 const seedUsers = [
@@ -8,30 +9,35 @@ const seedUsers = [
     name: 'Sarah Johnson',
     avatarUrl: 'https://images.unsplash.com/photo-1494790108755-2616b612b47c?w=150',
     role: 'admin' as const,
+    country: 'PT', // Portugal
   },
   {
     email: 'mike.chen@company.com',
     name: 'Mike Chen',
     avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
     role: 'member' as const,
+    country: 'NL', // Netherlands
   },
   {
     email: 'emily.davis@company.com',
     name: 'Emily Davis',
     avatarUrl: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
     role: 'member' as const,
+    country: 'PT', // Portugal
   },
   {
     email: 'alex.rodriguez@company.com',
     name: 'Alex Rodriguez',
     avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
     role: 'member' as const,
+    country: 'NL', // Netherlands
   },
   {
     email: 'jessica.wang@company.com',
     name: 'Jessica Wang',
     avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150',
     role: 'member' as const,
+    country: 'PT', // Portugal
   },
 ];
 
@@ -125,6 +131,11 @@ async function seed() {
     
     const insertedRequests = await db.insert(holidayRequests).values(holidayRequestsWithUsers).returning();
     console.log(`✅ Created ${insertedRequests.length} holiday requests`);
+    
+    // Sync public holidays for all active countries
+    console.log('🎊 Syncing public holidays for active countries...');
+    await syncHolidaysForAllActiveCountries();
+    console.log('✅ Public holidays synced successfully');
     
     console.log('🎉 Database seeding completed successfully!');
     

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { users, holidayRequests } from '@/lib/schema';
 import { eq, and, gte, lte, or } from 'drizzle-orm';
+import { getHolidaysForDashboard, checkHolidayConflicts as checkHolidayConflictsFromService, getStoredHolidays } from '@/lib/holiday-service';
 // Temporarily disabled AI suggestions
 // import { suggestAlternativeDates } from '@/ai/flows/suggest-alternative-dates';
 import { revalidatePath } from 'next/cache';
@@ -145,29 +146,54 @@ export async function getHolidayRequests() {
 }
 
 /**
+ * Get public holidays for dashboard display
+ */
+export async function getPublicHolidays() {
+  try {
+    // Verify authentication
+    await requireAuth();
+    
+    const holidays = await getHolidaysForDashboard();
+    return { success: true, data: holidays };
+  } catch (error) {
+    console.error('Error fetching public holidays:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch public holidays';
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
  * Create a new holiday request in the database
  */
 export async function createHolidayRequest(input: RequestTimeOffInput) {
+  console.log('[Server] createHolidayRequest called with:', input);
+  
   try {
     const userId = await requireAuth();
+    console.log('[Server] Creating request for user:', userId);
     
     const parsedInput = requestSchema.safeParse(input);
     if (!parsedInput.success) {
+      console.error('[Server] Input validation failed:', parsedInput.error.format());
       return { success: false, error: 'Invalid input data', details: parsedInput.error.format() };
     }
 
     const { startDate, endDate, leaveType, notes } = parsedInput.data;
+    console.log('[Server] Parsed input:', { startDate, endDate, leaveType, notes });
 
     // Check if user is admin
     const isAdmin = await isUserAdmin(userId);
+    console.log('[Server] User is admin:', isAdmin);
 
     const conflicts = await checkForConflicts(startDate, endDate);
+    console.log('[Server] Conflicts check result:', conflicts);
     
     // Only check for conflicts - don't block submission
     // Admin requests are auto-approved regardless of conflicts
     // Non-admin requests can proceed with conflicts (manager will decide)
 
     // Create the holiday request with automatic approval for admins
+    console.log('[Server] Inserting holiday request into database...');
     const [newRequest] = await db
       .insert(holidayRequests)
       .values({
@@ -181,12 +207,17 @@ export async function createHolidayRequest(input: RequestTimeOffInput) {
       })
       .returning();
 
+    console.log('[Server] Holiday request created successfully:', newRequest);
+
     // Revalidate the page to show updated data
     revalidatePath('/');
     
     return { success: true, data: newRequest };
   } catch (error) {
-    console.error('Error creating holiday request:', error);
+    console.error('[Server] Error creating holiday request:', error);
+    if (error instanceof Error) {
+      console.error('[Server] Error stack:', error.stack);
+    }
     const errorMessage = error instanceof Error ? error.message : 'Failed to create holiday request';
     return { success: false, error: errorMessage };
   }
@@ -294,8 +325,11 @@ async function checkForConflicts(startDate: string, endDate: string): Promise<{ 
  * Accepts Date objects and handles authentication
  */
 export async function handleRequestTimeOff(input: { startDate: string; endDate: string; leaveType: string; notes?: string }) {
+  console.log('[Server] handleRequestTimeOff called with:', input);
+  
   try {
-    await requireAuth();
+    const userId = await requireAuth();
+    console.log('[Server] User authenticated:', userId);
     
     const mappedInput: RequestTimeOffInput = {
       startDate: input.startDate,
@@ -304,9 +338,17 @@ export async function handleRequestTimeOff(input: { startDate: string; endDate: 
       notes: input.notes,
     };
     
-    return await createHolidayRequest(mappedInput);
+    console.log('[Server] Mapped input:', mappedInput);
+    
+    const result = await createHolidayRequest(mappedInput);
+    console.log('[Server] createHolidayRequest result:', result);
+    
+    return result;
   } catch (error) {
-    console.error('Error in handleRequestTimeOff:', error);
+    console.error('[Server] Error in handleRequestTimeOff:', error);
+    if (error instanceof Error) {
+      console.error('[Server] Error stack:', error.stack);
+    }
     const errorMessage = error instanceof Error ? error.message : 'Failed to process holiday request';
     return { success: false, error: errorMessage };
   }
@@ -551,6 +593,59 @@ export async function checkHolidayConflicts(input: { startDate: string; endDate:
 }
 
 /**
+ * Check for conflicts with public holidays
+ */
+export async function checkPublicHolidayConflicts(input: { startDate: string; endDate: string }): Promise<{ 
+  success: boolean; 
+  hasConflict: boolean; 
+  publicHolidays?: Array<{ 
+    id: string; 
+    date: string; 
+    name: string; 
+    localName: string | null; 
+    country: string; 
+    type: string; 
+  }>; 
+  error?: string; 
+}> {
+  try {
+    const currentUserId = await requireAuth();
+    
+    // Get the current user's country
+    const currentUser = await db.query.users.findFirst({
+      where: eq(users.id, currentUserId),
+    });
+    
+    if (!currentUser?.country) {
+      return { success: true, hasConflict: false };
+    }
+    
+    const holidaysInRange = await checkHolidayConflictsFromService(
+      currentUser.country,
+      input.startDate,
+      input.endDate
+    );
+    
+    return {
+      success: true,
+      hasConflict: holidaysInRange.length > 0,
+      publicHolidays: holidaysInRange.map((holiday) => ({
+        id: holiday.id,
+        date: holiday.date,
+        name: holiday.name,
+        localName: holiday.localName,
+        country: holiday.country,
+        type: holiday.type,
+      })),
+    };
+  } catch (error) {
+    console.error('Error checking public holiday conflicts:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to check public holiday conflicts';
+    return { success: false, hasConflict: false, error: errorMessage };
+  }
+}
+
+/**
  * Admin action to approve or reject holiday requests
  */
 export async function updateRequestStatus(requestId: string, status: 'approved' | 'rejected'): Promise<{ success: boolean; error?: string }> {
@@ -775,6 +870,21 @@ export async function calculatePtoBalance(userId?: string): Promise<{
     const yearStart = `${currentYear}-01-01`;
     const yearEnd = `${currentYear}-12-31`;
 
+    // Get the target user's country for public holidays
+    const targetUser = await db.query.users.findFirst({
+      where: eq(users.id, targetUserId),
+    });
+    
+    let publicHolidays: Array<{ date: string }> = [];
+    if (targetUser?.country) {
+      try {
+        publicHolidays = await getStoredHolidays(targetUser.country, currentYear);
+      } catch (error) {
+        console.error('Error fetching public holidays for PTO calculation:', error);
+        // Continue without public holidays if fetch fails
+      }
+    }
+
     // Fetch approved requests for the current year
     const approvedRequests = await db.query.holidayRequests.findMany({
       where: (table, { and, eq, gte, lte }) => and(
@@ -797,7 +907,10 @@ export async function calculatePtoBalance(userId?: string): Promise<{
       ),
     });
 
-    // Calculate weekdays only (excluding weekends) for vacation requests
+    // Create a Set of public holiday dates for fast lookup
+    const publicHolidayDates = new Set(publicHolidays.map(holiday => holiday.date));
+
+    // Calculate weekdays only (excluding weekends and public holidays) for vacation requests
     const calculateWeekdays = (requests: typeof approvedRequests) => {
       return requests.reduce((total, request) => {
         const startDate = new Date(request.startDate);
@@ -808,9 +921,16 @@ export async function calculatePtoBalance(userId?: string): Promise<{
         
         while (currentDate <= endDate) {
           const dayOfWeek = currentDate.getDay();
-          // 0 = Sunday, 6 = Saturday, so we want 1-5 (Monday-Friday)
+          
+          // Only count weekdays (Monday-Friday) that are not public holidays
           if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-            weekdaysCount++;
+            // Format date as YYYY-MM-DD to match public holiday format
+            const dateString = currentDate.toISOString().split('T')[0];
+            
+            // Only count if it's not a public holiday
+            if (!publicHolidayDates.has(dateString)) {
+              weekdaysCount++;
+            }
           }
           currentDate.setDate(currentDate.getDate() + 1);
         }
