@@ -1,6 +1,6 @@
 import { db } from './db';
 import { users, holidayRequests } from './schema';
-import { syncHolidaysForAllActiveCountries } from './holiday-service';
+import { syncPublicHolidays } from '../app/actions';
 import 'dotenv/config';
 
 const seedUsers = [
@@ -134,8 +134,12 @@ async function seed() {
     
     // Sync public holidays for all active countries
     console.log('🎊 Syncing public holidays for active countries...');
-    await syncHolidaysForAllActiveCountries();
-    console.log('✅ Public holidays synced successfully');
+    const syncResult = await syncPublicHolidays();
+    if (syncResult.success) {
+      console.log('✅ Public holidays synced successfully');
+    } else {
+      console.error('❌ Failed to sync public holidays:', syncResult.error);
+    }
     
     console.log('🎉 Database seeding completed successfully!');
     

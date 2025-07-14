@@ -4,12 +4,16 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { users, holidayRequests } from '@/lib/schema';
 import { eq, and, gte, lte, or } from 'drizzle-orm';
-import { getHolidaysForDashboard, checkHolidayConflicts as checkHolidayConflictsFromService, getStoredHolidays } from '@/lib/holiday-service';
+import { publicHolidays } from '@/lib/schema';
+import { sql, inArray } from 'drizzle-orm';
 // Temporarily disabled AI suggestions
 // import { suggestAlternativeDates } from '@/ai/flows/suggest-alternative-dates';
 import { revalidatePath } from 'next/cache';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
+
+// Public Holidays API Base URL
+const HOLIDAYS_API_BASE_URL = 'https://date.nager.at/api/v3';
 
 const requestSchema = z.object({
   startDate: z.string({
@@ -153,7 +157,31 @@ export async function getPublicHolidays() {
     // Verify authentication
     await requireAuth();
     
-    const holidays = await getHolidaysForDashboard();
+    const currentYear = new Date().getFullYear();
+    const nextYear = currentYear + 1;
+    
+    // Get all unique countries from users
+    const activeCountries = await db.selectDistinct({ country: users.country })
+      .from(users)
+      .where(sql`${users.country} IS NOT NULL`);
+
+    const countries = activeCountries.map(row => row.country).filter((country): country is string => Boolean(country));
+    
+    if (countries.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    // Get holidays for all countries
+    const holidays = await db.select()
+      .from(publicHolidays)
+      .where(
+        and(
+          inArray(publicHolidays.country, countries),
+          inArray(publicHolidays.year, [currentYear, nextYear])
+        )
+      )
+      .orderBy(publicHolidays.date);
+
     return { success: true, data: holidays };
   } catch (error) {
     console.error('Error fetching public holidays:', error);
@@ -620,11 +648,16 @@ export async function checkPublicHolidayConflicts(input: { startDate: string; en
       return { success: true, hasConflict: false };
     }
     
-    const holidaysInRange = await checkHolidayConflictsFromService(
-      currentUser.country,
-      input.startDate,
-      input.endDate
-    );
+    const holidaysInRange = await db.select()
+      .from(publicHolidays)
+      .where(
+        and(
+          eq(publicHolidays.country, currentUser.country),
+          sql`${publicHolidays.date} >= ${input.startDate}`,
+          sql`${publicHolidays.date} <= ${input.endDate}`
+        )
+      )
+      .orderBy(publicHolidays.date);
     
     return {
       success: true,
@@ -878,7 +911,10 @@ export async function calculatePtoBalance(userId?: string): Promise<{
     let publicHolidays: Array<{ date: string }> = [];
     if (targetUser?.country) {
       try {
-        publicHolidays = await getStoredHolidays(targetUser.country, currentYear);
+        const result = await getStoredPublicHolidays(targetUser.country, currentYear);
+        if (result.success && result.data) {
+          publicHolidays = result.data;
+        }
       } catch (error) {
         console.error('Error fetching public holidays for PTO calculation:', error);
         // Continue without public holidays if fetch fails
@@ -961,6 +997,117 @@ export async function calculatePtoBalance(userId?: string): Promise<{
   } catch (error) {
     console.error('Error calculating PTO balance:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to calculate PTO balance';
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Fetch public holidays from API and store in database
+ */
+export async function fetchAndStorePublicHolidays(countryCode: string, year: number) {
+  try {
+    await requireAuth();
+    
+    // Fetch from API
+    const response = await fetch(`${HOLIDAYS_API_BASE_URL}/PublicHolidays/${year}/${countryCode}`, {
+      next: { revalidate: 86400 }, // Cache for 24 hours
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch holidays: ${response.statusText}`);
+    }
+
+    const holidays = await response.json();
+    
+    // Store in database
+    if (holidays.length > 0) {
+      const dbHolidays = holidays.map((holiday: any) => ({
+        country: holiday.countryCode,
+        date: holiday.date,
+        name: holiday.name,
+        localName: holiday.localName,
+        type: holiday.type,
+        year: new Date(holiday.date).getFullYear(),
+      }));
+
+      await db.insert(publicHolidays)
+        .values(dbHolidays)
+        .onConflictDoUpdate({
+          target: [publicHolidays.country, publicHolidays.date],
+          set: {
+            name: sql`excluded.name`,
+            localName: sql`excluded.local_name`,
+            type: sql`excluded.type`,
+            updatedAt: sql`now()`,
+          },
+        });
+    }
+
+    return { success: true, data: holidays };
+  } catch (error) {
+    console.error('Error fetching and storing holidays:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch holidays';
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Get stored public holidays for a country and year
+ */
+export async function getStoredPublicHolidays(countryCode: string, year: number) {
+  try {
+    await requireAuth();
+    
+    const holidays = await db.select()
+      .from(publicHolidays)
+      .where(
+        and(
+          eq(publicHolidays.country, countryCode),
+          eq(publicHolidays.year, year)
+        )
+      )
+      .orderBy(publicHolidays.date);
+
+    return { success: true, data: holidays };
+  } catch (error) {
+    console.error('Error fetching stored holidays:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch stored holidays';
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Sync holidays for all active user countries
+ */
+export async function syncPublicHolidays() {
+  try {
+    await requireAuth();
+    
+    const currentYear = new Date().getFullYear();
+    const nextYear = currentYear + 1;
+    
+    // Get all unique countries from users
+    const activeCountries = await db.selectDistinct({ country: users.country })
+      .from(users)
+      .where(sql`${users.country} IS NOT NULL`);
+
+    const countries = activeCountries.map(row => row.country).filter((country): country is string => Boolean(country));
+    
+    if (countries.length === 0) {
+      return { success: true, message: 'No active countries found' };
+    }
+
+    // Fetch and store holidays for each country
+    for (const country of countries) {
+      for (const year of [currentYear, nextYear]) {
+        await fetchAndStorePublicHolidays(country, year);
+      }
+    }
+
+    return { success: true, message: `Synced holidays for ${countries.length} countries` };
+  } catch (error) {
+    console.error('Error syncing holidays:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to sync holidays';
     return { success: false, error: errorMessage };
   }
 }
