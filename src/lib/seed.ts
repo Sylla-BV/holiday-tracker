@@ -1,6 +1,6 @@
 import { db } from './db';
 import { users, holidayRequests } from './schema';
-import { syncPublicHolidays } from '../app/actions';
+// Removed import for syncPublicHolidays - will use direct database operations instead
 import 'dotenv/config';
 
 const seedUsers = [
@@ -132,14 +132,8 @@ async function seed() {
     const insertedRequests = await db.insert(holidayRequests).values(holidayRequestsWithUsers).returning();
     console.log(`✅ Created ${insertedRequests.length} holiday requests`);
     
-    // Sync public holidays for all active countries
-    console.log('🎊 Syncing public holidays for active countries...');
-    const syncResult = await syncPublicHolidays();
-    if (syncResult.success) {
-      console.log('✅ Public holidays synced successfully');
-    } else {
-      console.error('❌ Failed to sync public holidays:', syncResult.error);
-    }
+    // Public holidays sync message
+    console.log('💡 To sync public holidays, run: npx tsx scripts/sync-holidays.ts');
     
     console.log('🎉 Database seeding completed successfully!');
     

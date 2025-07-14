@@ -1111,3 +1111,248 @@ export async function syncPublicHolidays() {
     return { success: false, error: errorMessage };
   }
 }
+
+/**
+ * Admin-only: Add a new public holiday
+ */
+export async function addPublicHoliday(holidayData: {
+  country: string;
+  date: string;
+  name: string;
+  localName?: string;
+  type: string;
+}) {
+  try {
+    const currentUserId = await requireAuth();
+    
+    // Check if current user is admin
+    const currentUser = await db.query.users.findFirst({
+      where: eq(users.id, currentUserId),
+    });
+
+    if (!currentUser || currentUser.role !== 'admin') {
+      return { success: false, error: 'Admin access required' };
+    }
+
+    // Validate input
+    if (!holidayData.country || !holidayData.date || !holidayData.name || !holidayData.type) {
+      return { success: false, error: 'Country, date, name, and type are required' };
+    }
+
+    // Check if holiday already exists
+    const existing = await db.select()
+      .from(publicHolidays)
+      .where(
+        and(
+          eq(publicHolidays.country, holidayData.country),
+          eq(publicHolidays.date, holidayData.date)
+        )
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      return { success: false, error: 'Holiday already exists for this date and country' };
+    }
+
+    // Add the holiday
+    const [newHoliday] = await db.insert(publicHolidays)
+      .values({
+        country: holidayData.country,
+        date: holidayData.date,
+        name: holidayData.name,
+        localName: holidayData.localName || null,
+        type: holidayData.type,
+        year: new Date(holidayData.date).getFullYear(),
+      })
+      .returning();
+
+    return { success: true, data: newHoliday };
+  } catch (error) {
+    console.error('Error adding public holiday:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to add public holiday';
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Admin-only: Update an existing public holiday
+ */
+export async function updatePublicHoliday(id: string, holidayData: {
+  country?: string;
+  date?: string;
+  name?: string;
+  localName?: string;
+  type?: string;
+}) {
+  try {
+    const currentUserId = await requireAuth();
+    
+    // Check if current user is admin
+    const currentUser = await db.query.users.findFirst({
+      where: eq(users.id, currentUserId),
+    });
+
+    if (!currentUser || currentUser.role !== 'admin') {
+      return { success: false, error: 'Admin access required' };
+    }
+
+    // Prepare update data
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+
+    if (holidayData.country) updateData.country = holidayData.country;
+    if (holidayData.date) {
+      updateData.date = holidayData.date;
+      updateData.year = new Date(holidayData.date).getFullYear();
+    }
+    if (holidayData.name) updateData.name = holidayData.name;
+    if (holidayData.localName !== undefined) updateData.localName = holidayData.localName;
+    if (holidayData.type) updateData.type = holidayData.type;
+
+    // Update the holiday
+    const [updatedHoliday] = await db
+      .update(publicHolidays)
+      .set(updateData)
+      .where(eq(publicHolidays.id, id))
+      .returning();
+
+    if (!updatedHoliday) {
+      return { success: false, error: 'Holiday not found' };
+    }
+
+    return { success: true, data: updatedHoliday };
+  } catch (error) {
+    console.error('Error updating public holiday:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update public holiday';
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Admin-only: Delete a public holiday
+ */
+export async function deletePublicHoliday(id: string) {
+  try {
+    const currentUserId = await requireAuth();
+    
+    // Check if current user is admin
+    const currentUser = await db.query.users.findFirst({
+      where: eq(users.id, currentUserId),
+    });
+
+    if (!currentUser || currentUser.role !== 'admin') {
+      return { success: false, error: 'Admin access required' };
+    }
+
+    // Delete the holiday
+    const [deletedHoliday] = await db
+      .delete(publicHolidays)
+      .where(eq(publicHolidays.id, id))
+      .returning();
+
+    if (!deletedHoliday) {
+      return { success: false, error: 'Holiday not found' };
+    }
+
+    return { success: true, data: deletedHoliday };
+  } catch (error) {
+    console.error('Error deleting public holiday:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete public holiday';
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Admin-only: Get all public holidays with filtering options
+ */
+export async function getHolidaysForAdmin(filters?: {
+  country?: string;
+  year?: number;
+  search?: string;
+}) {
+  try {
+    const currentUserId = await requireAuth();
+    
+    // Check if current user is admin
+    const currentUser = await db.query.users.findFirst({
+      where: eq(users.id, currentUserId),
+    });
+
+    if (!currentUser || currentUser.role !== 'admin') {
+      return { success: false, error: 'Admin access required' };
+    }
+
+    const conditions = [];
+    
+    if (filters?.country) {
+      conditions.push(eq(publicHolidays.country, filters.country));
+    }
+    
+    if (filters?.year) {
+      conditions.push(eq(publicHolidays.year, filters.year));
+    }
+    
+    if (filters?.search) {
+      conditions.push(
+        sql`${publicHolidays.name} ILIKE ${`%${filters.search}%`} OR ${publicHolidays.localName} ILIKE ${`%${filters.search}%`}`
+      );
+    }
+    
+    let holidays;
+    if (conditions.length > 0) {
+      holidays = await db.select()
+        .from(publicHolidays)
+        .where(and(...conditions))
+        .orderBy(publicHolidays.date);
+    } else {
+      holidays = await db.select()
+        .from(publicHolidays)
+        .orderBy(publicHolidays.date);
+    }
+
+    return { success: true, data: holidays };
+  } catch (error) {
+    console.error('Error getting holidays for admin:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get holidays';
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Admin-only: Delete multiple public holidays
+ */
+export async function deleteMultipleHolidays(ids: string[]) {
+  try {
+    const currentUserId = await requireAuth();
+    
+    // Check if current user is admin
+    const currentUser = await db.query.users.findFirst({
+      where: eq(users.id, currentUserId),
+    });
+
+    if (!currentUser || currentUser.role !== 'admin') {
+      return { success: false, error: 'Admin access required' };
+    }
+
+    if (!ids || ids.length === 0) {
+      return { success: false, error: 'No holiday IDs provided' };
+    }
+
+    // Delete the holidays
+    const deletedHolidays = await db
+      .delete(publicHolidays)
+      .where(inArray(publicHolidays.id, ids))
+      .returning();
+
+    return { 
+      success: true, 
+      data: deletedHolidays,
+      message: `Successfully deleted ${deletedHolidays.length} holiday(s)`
+    };
+  } catch (error) {
+    console.error('Error deleting multiple holidays:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete holidays';
+    return { success: false, error: errorMessage };
+  }
+}
