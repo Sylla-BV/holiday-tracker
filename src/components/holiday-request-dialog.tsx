@@ -40,7 +40,7 @@ import { CalendarIcon, Loader2, Forward, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { addDays, format } from 'date-fns';
 import { toast } from 'sonner';
-import { handleRequestTimeOff, checkHolidayConflicts } from '@/app/actions';
+import { handleRequestTimeOff, checkHolidayConflicts, checkPublicHolidayConflicts } from '@/app/actions';
 // Temporarily disabled AI suggestions
 // import type { SuggestAlternativeDatesOutput } from '@/ai/flows/suggest-alternative-dates';
 
@@ -61,10 +61,20 @@ type ConflictData = {
   userName: string;
 };
 
+type PublicHolidayData = {
+  id: string;
+  date: string;
+  name: string;
+  localName: string | null;
+  country: string;
+  type: string;
+};
+
 export function HolidayRequestDialog() {
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [conflicts, setConflicts] = useState<ConflictData[]>([]);
+  const [publicHolidays, setPublicHolidays] = useState<PublicHolidayData[]>([]);
   const [showConflicts, setShowConflicts] = useState(false);
   const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
   // Temporarily disabled AI suggestions
@@ -83,10 +93,15 @@ export function HolidayRequestDialog() {
   const { startDate } = form.watch();
 
   async function checkForConflicts(values: z.infer<typeof formSchema>) {
+    console.log('Checking for conflicts with values:', values);
     setIsCheckingConflicts(true);
     
     // Format dates to YYYY-MM-DD string without timezone conversion
     const formatDateToString = (date: Date) => {
+      if (!(date instanceof Date) || isNaN(date.getTime())) {
+        console.error('Invalid date provided to checkForConflicts:', date);
+        throw new Error('Invalid date provided');
+      }
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
@@ -94,13 +109,37 @@ export function HolidayRequestDialog() {
     };
     
     try {
-      const conflictResult = await checkHolidayConflicts({
+      const conflictData = {
         startDate: formatDateToString(values.startDate),
         endDate: formatDateToString(values.endDate),
-      });
+      };
+      console.log('Calling checkHolidayConflicts with:', conflictData);
+      
+      // Check for team member conflicts
+      const conflictResult = await checkHolidayConflicts(conflictData);
+      console.log('Conflict check result:', conflictResult);
+      
+      // Check for public holiday conflicts
+      const publicHolidayResult = await checkPublicHolidayConflicts(conflictData);
+      console.log('Public holiday check result:', publicHolidayResult);
+      
+      let hasConflicts = false;
       
       if (conflictResult.success && conflictResult.hasConflict && conflictResult.conflicts) {
         setConflicts(conflictResult.conflicts);
+        hasConflicts = true;
+      } else {
+        setConflicts([]);
+      }
+      
+      if (publicHolidayResult.success && publicHolidayResult.hasConflict && publicHolidayResult.publicHolidays) {
+        setPublicHolidays(publicHolidayResult.publicHolidays);
+        hasConflicts = true;
+      } else {
+        setPublicHolidays([]);
+      }
+      
+      if (hasConflicts) {
         setShowConflicts(true);
         return true;
       }
@@ -108,6 +147,9 @@ export function HolidayRequestDialog() {
       return false;
     } catch (error) {
       console.error('Error checking conflicts:', error);
+      toast.error('Failed to check for conflicts', {
+        description: 'An error occurred while checking for scheduling conflicts.'
+      });
       return false;
     } finally {
       setIsCheckingConflicts(false);
@@ -115,45 +157,73 @@ export function HolidayRequestDialog() {
   }
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    console.log('Starting holiday request submission', { values });
+    
     // If we haven't checked for conflicts yet, check first
     if (!showConflicts) {
+      console.log('Checking for conflicts first...');
       const hasConflicts = await checkForConflicts(values);
       if (hasConflicts) {
+        console.log('Conflicts found, showing conflict UI');
         return;
       }
     }
     
     // Proceed with submission
     setIsLoading(true);
+    console.log('Proceeding with submission...');
 
     // Format dates to YYYY-MM-DD string without timezone conversion
     const formatDateToString = (date: Date) => {
+      if (!(date instanceof Date) || isNaN(date.getTime())) {
+        console.error('Invalid date provided:', date);
+        throw new Error('Invalid date provided');
+      }
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
+      const formatted = `${year}-${month}-${day}`;
+      console.log(`Formatted date: ${date.toISOString()} -> ${formatted}`);
+      return formatted;
     };
 
-    const result = await handleRequestTimeOff({
+    const requestData = {
       startDate: formatDateToString(values.startDate),
       endDate: formatDateToString(values.endDate),
       leaveType: values.leaveType,
       notes: values.notes,
-    });
-
-    setIsLoading(false);
+    };
     
-    if (result.success) {
-      toast.success('Request Submitted!', {
-        description: 'Your time off request has been successfully submitted.',
-      });
-      setOpen(false);
-      form.reset();
-      setShowConflicts(false);
-      setConflicts([]);
-    } else {
-      toast.error('An error occurred', {
-        description: result.error || 'Failed to process your request.'
+    console.log('Calling handleRequestTimeOff with data:', requestData);
+    
+    try {
+      const result = await handleRequestTimeOff(requestData);
+      
+      console.log('handleRequestTimeOff result:', result);
+      
+      setIsLoading(false);
+      
+      if (result.success) {
+        console.log('Request successful, showing success toast');
+        toast.success('Request Submitted!', {
+          description: 'Your time off request has been successfully submitted.',
+        });
+        setOpen(false);
+        form.reset();
+        setShowConflicts(false);
+        setConflicts([]);
+        setPublicHolidays([]);
+      } else {
+        console.error('Request failed with error:', result.error);
+        toast.error('An error occurred', {
+          description: result.error || 'Failed to process your request.'
+        });
+      }
+    } catch (error) {
+      console.error('Unexpected error during submission:', error);
+      setIsLoading(false);
+      toast.error('Unexpected error', {
+        description: 'An unexpected error occurred. Please check the console for details.'
       });
     }
   }
@@ -172,6 +242,7 @@ export function HolidayRequestDialog() {
             form.reset();
             setShowConflicts(false);
             setConflicts([]);
+            setPublicHolidays([]);
             // Temporarily disabled AI suggestions
             // setAiSuggestions(null);
         }
@@ -187,25 +258,57 @@ export function HolidayRequestDialog() {
           </DialogDescription>
         </DialogHeader>
         
-        {showConflicts && conflicts.length > 0 && (
+        {showConflicts && (conflicts.length > 0 || publicHolidays.length > 0) && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
             <div className="flex items-center gap-2 mb-2">
               <AlertTriangle className="h-4 w-4 text-amber-600" />
               <h4 className="font-medium text-amber-800">Scheduling Conflicts Detected</h4>
             </div>
-            <p className="text-sm text-amber-700 mb-3">
-              The following team members already have approved time off during your requested dates:
-            </p>
-            <div className="space-y-2 mb-3">
-              {conflicts.map((conflict) => (
-                <div key={conflict.id} className="flex items-center justify-between bg-white rounded p-2 text-sm">
-                  <span className="font-medium">{conflict.userName}</span>
-                  <span className="text-gray-600">
-                    {format(new Date(conflict.startDate), 'MMM d')} - {format(new Date(conflict.endDate), 'MMM d')}
-                  </span>
+            
+            {/* Team Member Conflicts */}
+            {conflicts.length > 0 && (
+              <div className="mb-4">
+                <p className="text-sm text-amber-700 mb-3">
+                  The following team members already have approved time off during your requested dates:
+                </p>
+                <div className="space-y-2 mb-3">
+                  {conflicts.map((conflict) => (
+                    <div key={conflict.id} className="flex items-center justify-between bg-white rounded p-2 text-sm">
+                      <span className="font-medium">{conflict.userName}</span>
+                      <span className="text-gray-600">
+                        {format(new Date(conflict.startDate), 'MMM d')} - {format(new Date(conflict.endDate), 'MMM d')}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+            
+            {/* Public Holiday Conflicts */}
+            {publicHolidays.length > 0 && (
+              <div className="mb-4">
+                <p className="text-sm text-amber-700 mb-3">
+                  The following public holidays occur during your requested dates:
+                </p>
+                <div className="space-y-2 mb-3">
+                  {publicHolidays.map((holiday) => (
+                    <div key={holiday.id} className="flex items-center justify-between bg-white rounded p-2 text-sm">
+                      <div>
+                        <span className="font-medium">{holiday.name}</span>
+                        {holiday.localName && holiday.localName !== holiday.name && (
+                          <span className="text-gray-600 ml-2">({holiday.localName})</span>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <span className="text-gray-600">{format(new Date(holiday.date), 'MMM d')}</span>
+                        <span className="text-xs text-gray-500 block">{holiday.country} • {holiday.type}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
             <p className="text-sm text-amber-700 mb-3">
               You can still submit this request, but please confirm you want to proceed despite the conflicts.
             </p>
@@ -216,6 +319,7 @@ export function HolidayRequestDialog() {
               onClick={() => {
                 setShowConflicts(false);
                 setConflicts([]);
+                setPublicHolidays([]);
               }}
             >
               Choose Different Dates

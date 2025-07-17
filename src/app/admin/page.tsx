@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Shield, User, Crown, Users, CalendarCheck } from 'lucide-react';
 import { UserRoleButton } from '@/components/admin/user-role-button';
 import { ApprovalButton } from '@/components/admin/approval-button';
+import { HolidaysManagementCard } from '@/components/admin/holidays-management-card';
 import Header from '@/components/layout/header';
 import { getUsers } from '../actions';
 
@@ -93,7 +94,7 @@ export default async function AdminPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
             {/* Pending Approvals */}
             <Card>
               <CardHeader>
@@ -207,6 +208,9 @@ export default async function AdminPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Public Holidays Management */}
+            <HolidaysManagementCard />
           </div>
         </div>
       </main>
