@@ -11,6 +11,46 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { processSlackStatusUpdate } from '@/lib/slack';
 
+/**
+ * Helper function to handle Slack status updates for approved requests
+ */
+async function handleApprovedRequestSlackUpdate(updatedRequest: {
+  userId: string;
+  startDate: string;
+  endDate: string;
+  leaveType: string;
+}): Promise<void> {
+  try {
+    // Get the user details for the request
+    const requestUser = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, updatedRequest.userId))
+      .limit(1);
+
+    if (requestUser[0] && requestUser[0].slackPresenceUpdate && requestUser[0].slackEmail) {
+      // Check if the holiday is starting today or in the future
+      const startDate = new Date(updatedRequest.startDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (startDate <= today) {
+        // Holiday is starting today or has already started
+        await processSlackStatusUpdate(
+          requestUser[0].email,
+          requestUser[0].slackEmail,
+          updatedRequest.leaveType,
+          updatedRequest.endDate,
+          true // isStarting
+        );
+      }
+    }
+  } catch (slackError) {
+    console.error('Error updating Slack status:', slackError);
+    // Don't fail the approval if Slack update fails
+  }
+}
+
 const requestSchema = z.object({
   startDate: z.string({
     required_error: 'Start date is required',
@@ -230,35 +270,7 @@ export async function updateHolidayRequestStatus(input: UpdateStatusInput) {
 
     // Handle Slack status updates for approved requests
     if (status === 'approved') {
-      try {
-        // Get the user details for the request
-        const requestUser = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, updatedRequest.userId))
-          .limit(1);
-
-        if (requestUser[0] && requestUser[0].slackPresenceUpdate && requestUser[0].slackEmail) {
-          // Check if the holiday is starting today or in the future
-          const startDate = new Date(updatedRequest.startDate);
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          
-          if (startDate <= today) {
-            // Holiday is starting today or has already started
-            await processSlackStatusUpdate(
-              requestUser[0].email,
-              requestUser[0].slackEmail,
-              updatedRequest.leaveType,
-              updatedRequest.endDate,
-              true // isStarting
-            );
-          }
-        }
-      } catch (slackError) {
-        console.error('Error updating Slack status:', slackError);
-        // Don't fail the approval if Slack update fails
-      }
+      await handleApprovedRequestSlackUpdate(updatedRequest);
     }
 
     // Revalidate the page to show updated data
@@ -723,35 +735,7 @@ export async function updateRequestStatus(requestId: string, status: 'approved' 
 
     // Handle Slack status updates for approved requests
     if (status === 'approved') {
-      try {
-        // Get the user details for the request
-        const requestUser = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, updatedRequest.userId))
-          .limit(1);
-
-        if (requestUser[0] && requestUser[0].slackPresenceUpdate && requestUser[0].slackEmail) {
-          // Check if the holiday is starting today or in the future
-          const startDate = new Date(updatedRequest.startDate);
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          
-          if (startDate <= today) {
-            // Holiday is starting today or has already started
-            await processSlackStatusUpdate(
-              requestUser[0].email,
-              requestUser[0].slackEmail,
-              updatedRequest.leaveType,
-              updatedRequest.endDate,
-              true // isStarting
-            );
-          }
-        }
-      } catch (slackError) {
-        console.error('Error updating Slack status:', slackError);
-        // Don't fail the approval if Slack update fails
-      }
+      await handleApprovedRequestSlackUpdate(updatedRequest);
     }
 
     // Revalidate pages to show updated data
