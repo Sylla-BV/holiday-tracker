@@ -35,19 +35,28 @@ export async function GET(request: NextRequest) {
     // Send the daily report
     const result = await sendDailyOutOfOfficeReport();
     
-    if (result.success) {
-      console.log('Daily report sent successfully');
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Daily report processed successfully' 
-      });
-    } else {
+    if (!result.success) {
       console.error('Failed to send daily report:', result.error);
       return NextResponse.json({ 
         success: false, 
         error: result.error 
       }, { status: 500 });
     }
+
+    // Process daily Slack status updates
+    const { processDailySlackStatusUpdates } = await import('@/app/actions');
+    const slackResult = await processDailySlackStatusUpdates();
+    
+    if (!slackResult.success) {
+      console.error('Failed to process Slack status updates:', slackResult.error);
+      // Don't fail the entire cron job if Slack updates fail
+    }
+
+    console.log('Daily report sent successfully');
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Daily report and Slack status updates processed successfully' 
+    });
     
   } catch (error) {
     console.error('Error in daily report cron job:', error);
