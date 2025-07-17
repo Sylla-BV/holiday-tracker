@@ -3,7 +3,6 @@
 import { PlaneTakeoff, Calendar } from 'lucide-react';
 import { HolidayRequestDialog } from '@/components/holiday-request-dialog';
 import UserMenu from '@/components/auth/user-menu';
-import AdminHeaderButton from '@/components/admin/admin-header-button';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -32,7 +31,6 @@ export default function Header() {
                 My Time Off
               </Link>
             </Button>
-            <AdminHeaderButton />
             <HolidayRequestDialog />
           </>
         )}

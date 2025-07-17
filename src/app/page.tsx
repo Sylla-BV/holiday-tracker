@@ -6,12 +6,11 @@ import AbsencesTable from '@/components/dashboard/absences-table';
 import CurrentStatusSkeleton from '@/components/dashboard/loading/current-status-skeleton';
 import TeamCalendarSkeleton from '@/components/dashboard/loading/team-calendar-skeleton';
 import AbsencesTableSkeleton from '@/components/dashboard/loading/absences-table-skeleton';
-import { getUsers, getHolidayRequests, getPublicHolidays } from './actions';
+import { getUsers, getHolidayRequests } from './actions';
 
 export default function Home() {
   const usersPromise = getUsers();
   const holidayRequestsPromise = getHolidayRequests();
-  const publicHolidaysPromise = getPublicHolidays();
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -23,7 +22,6 @@ export default function Home() {
               <TeamCalendar 
                 usersPromise={usersPromise} 
                 holidayRequestsPromise={holidayRequestsPromise} 
-                publicHolidaysPromise={publicHolidaysPromise}
               />
             </Suspense>
           </div>
