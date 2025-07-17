@@ -15,7 +15,6 @@ export const users = pgTable('users', {
   emailVerified: timestamp('emailVerified', { mode: 'date' }),
   image: varchar('image', { length: 500 }),
   role: roleEnum('role').notNull().default('member'),
-  country: varchar('country', { length: 2 }).default('PT'), // ISO 3166-1 alpha-2 country code
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -30,19 +29,6 @@ export const holidayRequests = pgTable('holiday_requests', {
   status: statusEnum('status').notNull().default('pending'),
   notes: text('notes'),
   approvedBy: uuid('approved_by').references(() => users.id),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
-});
-
-// Public holidays table
-export const publicHolidays = pgTable('public_holidays', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  country: varchar('country', { length: 2 }).notNull(), // ISO 3166-1 alpha-2 country code
-  date: date('date', { mode: 'string' }).notNull(),
-  name: varchar('name', { length: 255 }).notNull(),
-  localName: varchar('local_name', { length: 255 }),
-  type: varchar('type', { length: 50 }).notNull(), // Public, Bank, School, etc.
-  year: integer('year').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -103,8 +89,6 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type HolidayRequest = typeof holidayRequests.$inferSelect;
 export type NewHolidayRequest = typeof holidayRequests.$inferInsert;
-export type PublicHoliday = typeof publicHolidays.$inferSelect;
-export type NewPublicHoliday = typeof publicHolidays.$inferInsert;
 
 // Transformed holiday request type for client components
 export type TransformedHolidayRequest = {
