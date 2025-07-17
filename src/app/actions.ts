@@ -9,6 +9,7 @@ import { eq, and, gte, lte, or } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
+import { processSlackStatusUpdate } from '@/lib/slack';
 
 const requestSchema = z.object({
   startDate: z.string({
@@ -225,6 +226,39 @@ export async function updateHolidayRequestStatus(input: UpdateStatusInput) {
 
     if (!updatedRequest) {
       return { success: false, error: 'Holiday request not found' };
+    }
+
+    // Handle Slack status updates for approved requests
+    if (status === 'approved') {
+      try {
+        // Get the user details for the request
+        const requestUser = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, updatedRequest.userId))
+          .limit(1);
+
+        if (requestUser[0] && requestUser[0].slackPresenceUpdate && requestUser[0].slackEmail) {
+          // Check if the holiday is starting today or in the future
+          const startDate = new Date(updatedRequest.startDate);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          if (startDate <= today) {
+            // Holiday is starting today or has already started
+            await processSlackStatusUpdate(
+              requestUser[0].email,
+              requestUser[0].slackEmail,
+              updatedRequest.leaveType,
+              updatedRequest.endDate,
+              true // isStarting
+            );
+          }
+        }
+      } catch (slackError) {
+        console.error('Error updating Slack status:', slackError);
+        // Don't fail the approval if Slack update fails
+      }
     }
 
     // Revalidate the page to show updated data
@@ -455,6 +489,108 @@ export async function sendDailyOutOfOfficeReport(): Promise<{ success: boolean; 
 }
 
 /**
+ * Process daily Slack status updates for holidays starting and ending today
+ */
+export async function processDailySlackStatusUpdates(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Get holidays starting today
+    const holidaysStartingToday = await db
+      .select({
+        id: holidayRequests.id,
+        userId: holidayRequests.userId,
+        startDate: holidayRequests.startDate,
+        endDate: holidayRequests.endDate,
+        leaveType: holidayRequests.leaveType,
+        userEmail: users.email,
+        slackEmail: users.slackEmail,
+        slackPresenceUpdate: users.slackPresenceUpdate,
+      })
+      .from(holidayRequests)
+      .innerJoin(users, eq(holidayRequests.userId, users.id))
+      .where(
+        and(
+          eq(holidayRequests.startDate, today),
+          eq(holidayRequests.status, 'approved'),
+          eq(users.slackPresenceUpdate, true)
+        )
+      );
+
+    // Get holidays ending today
+    const holidaysEndingToday = await db
+      .select({
+        id: holidayRequests.id,
+        userId: holidayRequests.userId,
+        startDate: holidayRequests.startDate,
+        endDate: holidayRequests.endDate,
+        leaveType: holidayRequests.leaveType,
+        userEmail: users.email,
+        slackEmail: users.slackEmail,
+        slackPresenceUpdate: users.slackPresenceUpdate,
+      })
+      .from(holidayRequests)
+      .innerJoin(users, eq(holidayRequests.userId, users.id))
+      .where(
+        and(
+          eq(holidayRequests.endDate, today),
+          eq(holidayRequests.status, 'approved'),
+          eq(users.slackPresenceUpdate, true)
+        )
+      );
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    // Process holidays starting today
+    for (const holiday of holidaysStartingToday) {
+      if (holiday.slackEmail) {
+        try {
+          await processSlackStatusUpdate(
+            holiday.userEmail,
+            holiday.slackEmail,
+            holiday.leaveType,
+            holiday.endDate,
+            true // isStarting
+          );
+          successCount++;
+        } catch (error) {
+          console.error(`Error updating Slack status for ${holiday.userEmail}:`, error);
+          errorCount++;
+        }
+      }
+    }
+
+    // Process holidays ending today
+    for (const holiday of holidaysEndingToday) {
+      if (holiday.slackEmail) {
+        try {
+          await processSlackStatusUpdate(
+            holiday.userEmail,
+            holiday.slackEmail,
+            holiday.leaveType,
+            holiday.endDate,
+            false // isStarting (ending)
+          );
+          successCount++;
+        } catch (error) {
+          console.error(`Error clearing Slack status for ${holiday.userEmail}:`, error);
+          errorCount++;
+        }
+      }
+    }
+
+    console.log(`Daily Slack status updates processed: ${successCount} successful, ${errorCount} errors`);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error processing daily Slack status updates:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to process daily Slack status updates';
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
  * Get emoji for leave type
  */
 function getLeaveTypeEmoji(leaveType: string): string {
@@ -583,6 +719,39 @@ export async function updateRequestStatus(requestId: string, status: 'approved' 
 
     if (!updatedRequest) {
       return { success: false, error: 'Request not found' };
+    }
+
+    // Handle Slack status updates for approved requests
+    if (status === 'approved') {
+      try {
+        // Get the user details for the request
+        const requestUser = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, updatedRequest.userId))
+          .limit(1);
+
+        if (requestUser[0] && requestUser[0].slackPresenceUpdate && requestUser[0].slackEmail) {
+          // Check if the holiday is starting today or in the future
+          const startDate = new Date(updatedRequest.startDate);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          if (startDate <= today) {
+            // Holiday is starting today or has already started
+            await processSlackStatusUpdate(
+              requestUser[0].email,
+              requestUser[0].slackEmail,
+              updatedRequest.leaveType,
+              updatedRequest.endDate,
+              true // isStarting
+            );
+          }
+        }
+      } catch (slackError) {
+        console.error('Error updating Slack status:', slackError);
+        // Don't fail the approval if Slack update fails
+      }
     }
 
     // Revalidate pages to show updated data
@@ -841,6 +1010,40 @@ export async function calculatePtoBalance(userId?: string): Promise<{
   } catch (error) {
     console.error('Error calculating PTO balance:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to calculate PTO balance';
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Update user Slack settings
+ */
+export async function updateUserSlackSettings(
+  userId: string,
+  slackPresenceUpdate: boolean,
+  slackEmail: string | null
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const currentUserId = await requireAuth();
+    
+    // Users can only update their own settings
+    if (currentUserId !== userId) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    await db
+      .update(users)
+      .set({
+        slackPresenceUpdate,
+        slackEmail,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+
+    revalidatePath('/settings');
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating Slack settings:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update Slack settings';
     return { success: false, error: errorMessage };
   }
 }

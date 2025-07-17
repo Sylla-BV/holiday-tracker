@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, date, timestamp, pgEnum, integer, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, date, timestamp, pgEnum, integer, primaryKey, boolean } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import type { AdapterAccount } from 'next-auth/adapters';
 
@@ -15,6 +15,8 @@ export const users = pgTable('users', {
   emailVerified: timestamp('emailVerified', { mode: 'date' }),
   image: varchar('image', { length: 500 }),
   role: roleEnum('role').notNull().default('member'),
+  slackPresenceUpdate: boolean('slack_presence_update').notNull().default(false),
+  slackEmail: varchar('slack_email', { length: 255 }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
