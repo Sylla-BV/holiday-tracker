@@ -104,7 +104,6 @@ export async function clearSlackUserStatus(userId: string): Promise<boolean> {
 }
 
 export async function setSlackUserPresence(
-  userId: string,
   presence: 'auto' | 'away'
 ): Promise<boolean> {
   try {
@@ -115,7 +114,7 @@ export async function setSlackUserPresence(
     });
     
     if (response.ok) {
-      console.log(`Successfully set Slack presence to ${presence} for user ${userId}`);
+      console.log(`Successfully set Slack presence to ${presence} for authenticated user`);
       return true;
     }
     
@@ -205,7 +204,7 @@ export async function processSlackStatusUpdate(
         };
       }
       
-      await setSlackUserPresence(slackUserId, 'away');
+      await setSlackUserPresence('away');
       
       return { success: true };
     } else {
@@ -218,7 +217,7 @@ export async function processSlackStatusUpdate(
         };
       }
       
-      await setSlackUserPresence(slackUserId, 'auto');
+      await setSlackUserPresence('auto');
       
       return { success: true };
     }
