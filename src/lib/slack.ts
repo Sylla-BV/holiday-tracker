@@ -1,5 +1,12 @@
 import { WebClient } from '@slack/web-api';
 
+interface SlackUserProfile {
+  status_text: string;
+  status_emoji: string;
+  status_expiration?: number;
+  [key: string]: unknown;
+}
+
 let slackClient: WebClient | null = null;
 
 function getSlackClient(): WebClient {
@@ -41,7 +48,7 @@ export async function updateSlackUserStatus(
   try {
     const client = getSlackClient();
     
-    const profile: any = {
+    const profile: SlackUserProfile = {
       status_text: statusText,
       status_emoji: statusEmoji,
     };
@@ -72,13 +79,15 @@ export async function clearSlackUserStatus(userId: string): Promise<boolean> {
   try {
     const client = getSlackClient();
     
+    const profile: SlackUserProfile = {
+      status_text: '',
+      status_emoji: '',
+      status_expiration: 0,
+    };
+    
     const response = await client.users.profile.set({
       user: userId,
-      profile: {
-        status_text: '',
-        status_emoji: '',
-        status_expiration: 0,
-      },
+      profile: profile,
     });
     
     if (response.ok) {
