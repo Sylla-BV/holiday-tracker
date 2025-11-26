@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { LogOut, User, Crown } from 'lucide-react';
+import { LogOut, User, Crown, Settings } from 'lucide-react';
 
 export default function UserMenu() {
   const { data: session } = useSession();
@@ -31,6 +31,12 @@ export default function UserMenu() {
   const handleAdminDashboard = () => {
     startTransition(() => {
       router.push('/admin');
+    });
+  };
+
+  const handleSettings = () => {
+    startTransition(() => {
+      router.push('/settings');
     });
   };
 
@@ -65,6 +71,10 @@ export default function UserMenu() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={handleSettings} disabled={isPending}>
+          <Settings className="mr-2 h-4 w-4" />
+          <span>{isPending ? 'Loading...' : 'Settings'}</span>
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={handleAdminDashboard} disabled={isPending}>
           <Crown className="mr-2 h-4 w-4" />
           <span>{isPending ? 'Loading...' : 'Admin Dashboard'}</span>
